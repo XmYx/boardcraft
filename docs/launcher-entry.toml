@@ -1,0 +1,53 @@
+# Draft entry for storytold/craft-launcher `crates/core/catalog.toml` (generated there by
+# scripts/sync-launcher-catalog.py). Values marked TODO need the ArtCraft team: the final icon and
+# its hash, screenshots on the launcher asset host, and the signing identities.
+[[apps]]
+color = [226, 104, 66]
+former_bundles = []
+former_ids = []
+former_names = []
+id = "boardcraft"
+binary = "boardcraft"
+flatpak_id = "ai.storyteller.boardcraft"
+mac_bundle_id = "ai.storyteller.boardcraft"
+mac_bundle_name = "BoardCraft"
+website = "https://github.com/storytold/boardcraft"
+windows_msi_publisher = "Learning Machines LLC"
+deb_package = "boardcraft"
+rpm_package = "boardcraft"
+desktop_categories = ["Graphics", "2DGraphics", "RasterGraphics", "AudioVideo"]
+startup_wm_class = "ai.storyteller.boardcraft"
+icon_url = "TODO: https://getartcraft.com/launcher-app-icons/boardcraft-<sha256>.png"
+icon_sha256 = "TODO"
+ink_dark = [240, 150, 116]
+ink_light = [150, 58, 26]
+kind = "official"
+mac_team = "DJ6XS33FX8"
+name = "BoardCraft"
+publisher = "ArtCraft"
+repo = "storytold/boardcraft"
+site = "https://github.com/storytold/boardcraft"
+tagline = "Storyboards and animatics"
+
+[apps.details]
+headline = "From script to animatic, panel by panel."
+about = "Open-source storyboarding and animatics, built in pure Rust. Board a screenplay from ScriptCraft, sketch and time every panel, and send the animatic to FilmCraft."
+platforms = "macOS, Windows, Linux"
+
+[[apps.details.features]]
+title = "Script to boards"
+text = "Import a Fountain screenplay and get scenes and panels with the dialogue and action already in place."
+
+[[apps.details.features]]
+title = "Sketch, frame, time"
+text = "Pressure-sensitive brush and layers, camera pans and zooms, and panel timing on a timeline."
+
+[[apps.details.features]]
+title = "Straight into the edit"
+text = "Play the animatic, then export it as an OpenTimelineIO timeline that FilmCraft opens."
+
+# TODO: screenshots on the launcher asset host, e.g.
+# [[apps.details.shots]]
+# caption = "The board"
+# key = "board"
+# url = "https://…/craft-launcher-assets/v1/boardcraft/board.jpg"

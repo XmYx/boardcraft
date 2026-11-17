@@ -1,0 +1,22 @@
+[package]
+name = "boardcraft"
+description = "BoardCraft desktop app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+default-run = "boardcraft"
+
+[lints]
+workspace = true
+
+[dependencies]
+boardcraft-core = { workspace = true }
+egui = { workspace = true }
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+rfd = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+egui_kittest = { workspace = true }
