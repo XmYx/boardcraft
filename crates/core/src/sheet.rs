@@ -207,7 +207,7 @@ fn sheet(project: &Project, opts: &SheetOptions, font_data: &[u8], index: u32) -
         project.scenes.iter().flat_map(|sc| sc.panels.iter().enumerate().map(move |(i, p)| Cell { scene: sc, panel: p, first_of_scene: i == 0 })).collect();
     let per = (cols * rows) as usize;
     let total = page_count(project, opts);
-    let fps = project.settings.fps.max(1) as f32;
+    let fps = project.settings.fps_f64() as f32;
     let metadata = craft_pdf::write::Metadata {
         creator: crate::GENERATOR.into(),
         producer: crate::GENERATOR.into(),
@@ -242,7 +242,8 @@ fn sheet(project: &Project, opts: &SheetOptions, font_data: &[u8], index: u32) -
                 }
                 // Label line: number, duration, heading on a scene's first panel.
                 let mut ty = y + img_h + LABEL_PT * 1.3;
-                let label = format!("{}   {:.1} {}", project.panel_label(cell.panel.id), cell.panel.duration as f32 / fps, opts.labels.seconds);
+                let shot = if cell.panel.shot.trim().is_empty() { String::new() } else { format!("   {}", cell.panel.shot.trim()) };
+                let label = format!("{}{shot}   {:.1} {}", project.panel_label(cell.panel.id), cell.panel.duration as f32 / fps, opts.labels.seconds);
                 text(&mut s, &font, LABEL_PT, x, ty, INK, &label);
                 if cell.first_of_scene && !cell.scene.heading.is_empty() {
                     let lw = measure.width(&label, LABEL_PT) + 12.0;

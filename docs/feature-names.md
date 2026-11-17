@@ -15,6 +15,13 @@ company's product or feature names appear as labels.
 | Export Animatic Timeline ▸ *format* | timeline + stills for an editor (formats named by their specifications) |
 | Conform Timing from Edit | take panel durations from an editor's cut |
 | Export Board Sheet (PDF) | printable pages of panels with their text |
+| Export Shot List (CSV) | one row per panel for schedules |
+| Board Settings | frame size, aspect ratio, frame rate |
+| Duplicate Panel | copy a panel after itself |
+| Onion Skin | the previous panel shown faintly over the drawing |
+| Edit in Image Editor | round trip a layer through the user's image editor |
+| Recover unsaved work | crash recovery from autosave |
+| Shot (field) | shot size/angle; presets use generic film terms (WS, MS, CU…) |
 | Export Panel Images (PNG) | one image per panel |
 | AI panel sketch | generate a sketch with the shared Craft AI tools (stub) |
 | Key at start / Key at end | add a camera key on the panel's first / last frame |

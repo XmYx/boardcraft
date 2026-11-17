@@ -10,8 +10,15 @@ app	AI panel sketch
 app	AI sketch
 app	Action
 app	Animatic timeline
+shared	Apply
+app	Aspect ratio
+app	Autosave failed: {error}
 app	Board
 app	Board (panel grid)
+app	Board Settings
+app	Board Settings…
+app	Board is {w}×{h} at {fps} fps
+app	BoardCraft closed before these boards were saved. Recover them?
 app	BoardCraft project
 app	Boarded {scenes} scenes from {file}
 app	Boarded {scenes} scenes, {n} panels from {file}
@@ -27,38 +34,53 @@ app	Conformed timing from {file}: {summary}
 app	Could not import {file}: {error}
 app	Could not open: {error}
 app	Could not read {file}: {error}
+app	Could not recover: {error}
+app	Could not write {file}: {error}
+app	Decide Later
 shared	Delete
 app	Delete Panel
 app	Delete key {f}
 app	Delete the camera key at frame {f}
 app	Demo board: Paper Boats
 app	Dialogue
+app	Discard {name}
 shared	Don't Save
 app	Drag to frame the shot, scroll to zoom (C)
 app	Draw (B)
+app	Drawings keep their size: the frame grows or crops around the centre.
+app	Duplicate Panel
 shared	Duration
 shared	Edit
+app	Edit in Image Editor…
 app	Edit key:
+app	Editing {file} in your image editor. Save there to update the panel.
 app	End
 app	Erase (E)
 shared	Eraser
 app	Export Animatic Timeline
 app	Export Board Sheet (PDF)
 app	Export Panel Images (PNG)…
+app	Export Shot List (CSV)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
 shared	File
+app	Fit Canvas (0)
 app	Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings.
+shared	Frame
+app	Frame rate
 app	Generate a sketch for this panel with the shared Craft AI tools (not connected yet)
 app	Go to start
 app	Hardness
 app	Heading
+shared	Height
 shared	Image
 shared	Images
 app	Import Image to Panel…
 app	Import Image…
 app	Import Screenplay…
 app	Imported {file}
+app	Keep panel lengths in seconds
+app	Keep the autosaves and ask again next time
 app	Key at end
 app	Key at start
 shared	Language
@@ -72,12 +94,14 @@ app	Move Later
 app	Move Panel Earlier
 app	Move Panel Later
 shared	Move Up
-app	New Board
+app	New Board…
 app	New Panel
 app	New Scene
 app	New panel at the end of this scene
 app	No panel selected.
 app	Notes
+app	Onion Skin (O)
+app	Open this layer in your image editor; BoardCraft reloads it when you save there
 app	Opened {file}
 shared	Open…
 app	Page {n} of {total}
@@ -94,7 +118,11 @@ app	Play the animatic (Space)
 app	Pressure: opacity
 app	Pressure: size
 app	Quit
-app	Redo Drawing
+app	Recover unsaved work
+app	Recover {name}
+app	Recovered unsaved work. Save it to keep it.
+shared	Redo
+app	Redone
 app	Reset camera
 shared	Save
 shared	Save As…
@@ -107,18 +135,28 @@ app	Screenplay
 app	Select a panel first
 app	Select a panel.
 app	Select a visible layer to draw on
+app	Set the frame to {ratio}, keeping its width
+app	Shot
+app	Shot presets
 shared	Size
 app	Start
 app	Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view.
 shared	System
 app	Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
 shared	Timeline
+app	Timing
 app	To Start
-app	Undo Drawing
+shared	Undo
+app	Undone
 shared	Unsaved changes
+app	Untitled board
 app	Updated the board from {file}: {summary}
+app	Updated the layer from {file}
 shared	View
+shared	Width
 app	Wrote the board sheet {file} ({n} pages)
+app	Wrote the shot list {file}
+app	Wrote {file}; open it in your image editor ({error})
 app	Wrote {n} panel images to {dir}
 shared	Zoom
 app	camera move
@@ -130,3 +168,4 @@ app	{format}…
 app	{layer} opacity
 app	{layer} options
 app	{layer} visible
+app	{name}, autosaved {time}

@@ -13,18 +13,22 @@
 
 | Measure | Today |
 |---|---|
-| Overall parity with the target (estimate) | ~5% |
+| Overall parity with the target (estimate) | ~28% (re-measured 2026-11-17; ~19% before the polish pass) |
 | Pipeline hand-offs | Fountain / FDX / scene-list JSON in (with re-import), OTIO / EDL / FCP7 XML / FCPXML out and conform back, PNG panels |
 | Tests | run `cargo xtask ci`: core, CLI, app UI (kittest, accessibility checks), xtask |
+
+## Safety
+
+Autosave every 30 s with crash recovery, undo/redo for every edit, atomic saves.
 
 ## By dimension
 
 | Dimension | Today | Next |
 |---|---|---|
 | Board structure | scenes → panels, reorder, scene number + heading | sequences/acts, shots vs panels, renumbering rules |
-| Drawing | round raster brush, pressure, eraser, layers, image import, pixel undo | vector strokes, stabilizer, fill, onion skin, light table, full undo |
+| Drawing | pressure brush, eraser, layers, image import, edit in any image editor, onion skin, zoom/pan, straight lines | pressure curve, stabilizer, lasso/transform, fill, vector |
 | Camera | pan/zoom keys per panel, eased, typed key values | rotation, timeline key editor, layer parallax |
-| Timing | per-panel duration, timeline edge retiming | audio track (dialogue, scratch), transitions |
+| Timing | per-panel duration, timeline edge retiming, 23.976–60 fps | audio track, transitions |
 | Playback | panel durations through camera moves, captions | audio, loop range |
 | Interchange | Fountain, Final Draft and ScriptCraft JSON import; re-import by scene id; OTIO, EDL, FCP7 XML, FCPXML export; conform timing; PDF board sheets; PNG stills | camera moves as FilmCraft Motion keyframes, sheet templates |
 | Agents | every edit a command; `boardcraft-cli` (new, info, exec, export) | MCP server / control channel |
@@ -44,11 +48,11 @@ English only until craft-i18n has `locales/<locale>/boardcraft.tsv`. See
 
 ## Upcoming
 
-1. Board sheet options in the app (fields, header text, grid).
-2. Camera moves into FilmCraft as Motion keyframes.
-3. Audio: dialogue/scratch track under the animatic.
-4. Full undo/redo through the command layer.
-5. AI panel sketch through the shared Craft AI client.
+1. Audio track under the animatic.
+2. Movie export with burn-ins.
+3. Pen tablet tuning and a stabilizer.
+4. Lasso, transform, rotation, fill.
+5. Remappable shortcuts.
 
 ## Agents: CLI and MCP
 

@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn reimport_keeps_drawings_and_follows_the_script() {
-        let mut p = fountain::project_from_script(&fountain::parse(V1), Settings { width: 64, height: 36, fps: 24 });
+        let mut p = fountain::project_from_script(&fountain::parse(V1), Settings { width: 64, height: 36, fps: 24, ntsc: false });
         // Draw on scene A's first panel and retime it.
         let a0 = p.scenes[0].panels[0].id;
         p.panel_mut(a0).unwrap().layers[0].pixels.polyline(&[(2.0, 2.0), (60.0, 30.0)], &Brush::default());

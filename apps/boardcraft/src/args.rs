@@ -10,6 +10,7 @@ Options:
   --demo                 open the built-in demo board
   --view board|panel     start in the board grid (default) or the panel editor
   --screenshot <PNG>     render the window once to PNG and quit
+  --data-dir <DIR>       where autosaves and recovery data live
   -h, --help             print this help
   -V, --version          print the version
 ";
@@ -27,6 +28,8 @@ pub struct Cli {
     pub view: StartView,
     pub screenshot: Option<PathBuf>,
     pub file: Option<PathBuf>,
+    /// Where autosaves live (default: the per-user data folder; `BOARDCRAFT_DATA_DIR` overrides).
+    pub data_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -70,6 +73,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Launch, String> {
                     other => return Err(format!("--view takes board or panel, not {:?}", other.unwrap_or(""))),
                 }
             }
+            "--data-dir" => cli.data_dir = Some(PathBuf::from(it.next().ok_or("--data-dir needs a folder")?)),
             "--screenshot" => cli.screenshot = Some(PathBuf::from(it.next().ok_or("--screenshot needs a file name")?)),
             "-h" | "--help" => return Ok(Launch::Print(USAGE.to_string())),
             "-V" | "--version" => return Ok(Launch::Print(version())),

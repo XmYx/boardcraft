@@ -32,6 +32,7 @@ const USAGE: &str = "usage:
   boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
   boardcraft-cli export-png <board.boardcraft> <dir>
   boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
+  boardcraft-cli export-shotlist <board.boardcraft> <out.csv>
   boardcraft-cli commands
   boardcraft-cli --version";
 
@@ -53,6 +54,9 @@ const COMMANDS: &[&str] = &[
     "import_fountain",
     "import_script",
     "conform",
+    "duplicate_panel",
+    "set_canvas",
+    "set_frame_rate",
 ];
 
 enum Fail {
@@ -158,6 +162,12 @@ fn run(args: &[String]) -> Result<String, Fail> {
             let files = stills::write_stills(&project, Path::new(arg(2)?)).map_err(op)?;
             Ok(format!("wrote {} panel images", files.len()))
         }
+        "export-shotlist" => {
+            let project = format::load(Path::new(arg(1)?)).map_err(op)?;
+            let out = Path::new(arg(2)?);
+            format::write_atomic(out, boardcraft_core::shotlist::csv(&project).as_bytes()).map_err(op)?;
+            Ok(format!("wrote {} ({} shots)", out.display(), project.panel_count()))
+        }
         "export-sheet" => {
             let project = format::load(Path::new(arg(1)?)).map_err(op)?;
             let out = Path::new(arg(2)?);
@@ -235,6 +245,9 @@ mod tests {
         let p = format::load(&board).unwrap();
         assert_eq!(p.scenes.len(), 1, "merged by heading");
         assert_eq!(p.scenes[0].panels[0].action, "Rain, harder.");
+        let csv = dir.join("shots.csv");
+        assert!(run(&s(&["export-shotlist", b, csv.to_str().unwrap()])).is_ok());
+        assert!(std::fs::read_to_string(&csv).unwrap().starts_with("scene,"));
         let pdf = dir.join("sheet.pdf");
         assert!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--paper", "letter", "--grid", "2x2"])).is_ok());
         assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));

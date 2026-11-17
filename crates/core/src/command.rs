@@ -20,6 +20,7 @@ pub enum TextField {
     Dialogue,
     Action,
     Notes,
+    Shot,
 }
 
 /// One change to a board.
@@ -37,6 +38,23 @@ pub enum Command {
     },
     DeletePanel {
         panel: Id,
+    },
+    /// Copy a panel (drawing, text, camera, timing) right after it.
+    DuplicatePanel {
+        panel: Id,
+    },
+    /// Change the canvas size without stretching (layers centred, cropped or extended).
+    SetCanvas {
+        width: u32,
+        height: u32,
+    },
+    /// Change the frame rate; `keep_time` rescales durations so panels last as long as before.
+    SetFrameRate {
+        fps: u32,
+        #[serde(default)]
+        ntsc: bool,
+        #[serde(default = "yes")]
+        keep_time: bool,
     },
     /// Move a panel one step earlier or later in board order.
     MovePanel {
@@ -162,6 +180,18 @@ pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
             project.scenes.retain(|s| !s.panels.is_empty());
             ok("deleted panel")
         }
+        Command::DuplicatePanel { panel } => {
+            let id = project.duplicate_panel(*panel)?;
+            Ok(Outcome { created: Some(id), message: format!("duplicated as {}", project.panel_label(id)) })
+        }
+        Command::SetCanvas { width, height } => {
+            project.set_canvas(*width, *height)?;
+            ok(format!("canvas {width}×{height}"))
+        }
+        Command::SetFrameRate { fps, ntsc, keep_time } => {
+            project.set_rate(*fps, *ntsc, *keep_time)?;
+            ok(format!("{} fps", project.settings.rate_label()))
+        }
         Command::MovePanel { panel, later } => {
             if project.panel(*panel).is_none() {
                 return Err(panel_missing(*panel));
@@ -181,6 +211,7 @@ pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
                 TextField::Dialogue => &mut p.dialogue,
                 TextField::Action => &mut p.action,
                 TextField::Notes => &mut p.notes,
+                TextField::Shot => &mut p.shot,
             };
             target.clone_from(text);
             ok("text set")
@@ -310,6 +341,30 @@ mod tests {
         assert!(parse(r#"{"cmd":"explode"}"#).is_err());
         assert!(parse("not json").is_err());
         assert_eq!(p, before);
+    }
+
+    #[test]
+    fn duplicate_canvas_and_rate() {
+        let mut p = crate::demo::demo_project();
+        let first = p.scenes[0].panels[0].id;
+        let n = p.panel_count();
+        let copy = apply(&mut p, &Command::DuplicatePanel { panel: first }).unwrap().created.unwrap();
+        assert_eq!(p.panel_count(), n + 1);
+        assert_eq!(p.scenes[0].panels[1].id, copy);
+        assert_ne!(p.panel(copy).unwrap().layers[0].id, p.panel(first).unwrap().layers[0].id);
+        assert!(p.panel(copy).unwrap().layers[1].pixels.shares_pixels(&p.panel(first).unwrap().layers[1].pixels));
+        let total_s = p.total_frames() as f64 / p.settings.fps_f64();
+        apply(&mut p, &parse(r#"{"cmd":"set_frame_rate","fps":24,"ntsc":true}"#).unwrap()).unwrap();
+        assert_eq!(p.settings.rate_label(), "23.976");
+        let after_s = p.total_frames() as f64 / p.settings.fps_f64();
+        assert!((after_s - total_s).abs() < 0.2, "{total_s} → {after_s}");
+        apply(&mut p, &Command::SetCanvas { width: 1920, height: 816 }).unwrap();
+        assert!(p.panels().all(|(_, x)| x.layers.iter().all(|l| l.pixels.width() == 1920 && l.pixels.height() == 816)));
+        assert!(apply(&mut p, &Command::SetCanvas { width: 1, height: 816 }).is_err());
+        assert!(apply(&mut p, &Command::SetFrameRate { fps: 0, ntsc: false, keep_time: true }).is_err());
+        // A file with ntsc reads back.
+        let back = crate::format::from_bytes(&crate::format::to_bytes(&p).unwrap()).unwrap();
+        assert!(back.settings.ntsc);
     }
 
     #[test]

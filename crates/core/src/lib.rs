@@ -17,6 +17,7 @@
 //! - [`timeline`]: the animatic as an editorial timeline (OTIO, CMX 3600 EDL, FCP7 XML, FCPXML) through
 //!   craft-timeline, and conform (timing back from an edit).
 //! - [`sheet`]: printable board sheets (PDF) through craft-pdf.
+//! - [`shotlist`]: the shot list as CSV.
 //! - [`ai`]: a stubbed hook for generating panel drawings through the shared Craft AI layer.
 //! - [`demo`]: a small procedurally drawn demo board.
 //!
@@ -35,6 +36,7 @@ pub mod model;
 pub mod raster;
 pub mod script;
 pub mod sheet;
+pub mod shotlist;
 pub mod stills;
 pub mod timeline;
 

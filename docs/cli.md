@@ -13,6 +13,7 @@ boardcraft-cli export board.boardcraft cut.otio              # .otio, .edl, .xml
 boardcraft-cli conform board.boardcraft edited.xml           # panel timing from an editor's cut
 boardcraft-cli export-png board.boardcraft stills/
 boardcraft-cli export-sheet board.boardcraft board.pdf --paper letter --grid 3x2   # printable board sheet
+boardcraft-cli export-shotlist board.boardcraft shots.csv    # shot list
 boardcraft-cli commands                                      # command names
 ```
 
@@ -28,9 +29,12 @@ Ids come from `info`. Every command is JSON with a `"cmd"` tag.
 | `add_scene` | `heading` | new scene with one blank panel; `created` = the panel |
 | `add_panel` | `scene?`, `after?` | blank panel after `after`, or at the end of `scene` / the last scene |
 | `delete_panel` | `panel` | refuses to delete the last panel |
+| `duplicate_panel` | `panel` | copy after it; `created` = the copy |
+| `set_canvas` | `width`, `height` | frame size without stretching (16–8192) |
+| `set_frame_rate` | `fps`, `ntsc?`, `keep_time?` (default true) | 23.976 = `{"fps":24,"ntsc":true}` |
 | `move_panel` | `panel`, `later` | one step earlier/later in board order, across scenes |
 | `set_duration` | `panel`, `frames` | clamped to 1 … one hour at 240 fps |
-| `set_text` | `panel`, `field` (`dialogue`/`action`/`notes`), `text` | |
+| `set_text` | `panel`, `field` (`dialogue`/`action`/`notes`/`shot`), `text` | |
 | `set_scene_heading` | `scene`, `heading` | |
 | `set_camera_key` | `panel`, `key` {`frame`, `center` [x, y], `zoom`} | add or replace; values clamped |
 | `remove_camera_key` | `panel`, `frame` | |

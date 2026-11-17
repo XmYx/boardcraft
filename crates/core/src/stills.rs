@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn writes_one_still_per_panel() {
-        let p = fountain::project_from_script(&fountain::parse("INT. A\n\nOne.\n\nEXT. B\n\nTwo.\n"), Settings { width: 64, height: 36, fps: 24 });
+        let p = fountain::project_from_script(&fountain::parse("INT. A\n\nOne.\n\nEXT. B\n\nTwo.\n"), Settings { width: 64, height: 36, fps: 24, ntsc: false });
         let dir = std::env::temp_dir().join(format!("boardcraft-stills-{}", std::process::id()));
         let files = write_stills(&p, &dir).unwrap();
         assert_eq!(files.len(), 2);

@@ -18,7 +18,12 @@ epaint_default_fonts = { workspace = true }
 egui = { workspace = true }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
 rfd = { workspace = true }
+# Open a layer in the user's image editor (MIT OR Apache-2.0; as FilmCraft and PhotoCraft).
+open = "5"
 log = { workspace = true }
+serde_json = { workspace = true }
+# Autosave timestamps (house rule: time goes through chrono).
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 craft-i18n = { workspace = true }
 craft-fonts-build = { workspace = true }
 

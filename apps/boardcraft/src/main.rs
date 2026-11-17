@@ -15,9 +15,13 @@
 mod i18n;
 mod app;
 mod args;
+mod autosave;
 mod board;
 mod canvas;
+mod external;
+mod history;
 mod inspector;
+mod settings;
 mod textures;
 mod timeline;
 #[cfg(test)]

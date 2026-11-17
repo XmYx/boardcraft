@@ -1,0 +1,1 @@
+- Safer and faster: autosave with crash recovery, undo for everything, Board Settings for aspect ratio and frame rate (including 23.976), shot list export, onion skin, canvas zoom, and editing a layer in any image editor.

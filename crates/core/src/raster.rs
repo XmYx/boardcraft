@@ -4,6 +4,8 @@
 //! round dab stamped along each stroke segment, with an adjustable soft edge; pen pressure can scale
 //! its size and opacity. The eraser removes alpha with the same dab.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 /// Largest canvas side BoardCraft creates or loads (pixels).
@@ -17,7 +19,9 @@ const MAX_DABS_PER_SEGMENT: usize = 20_000;
 pub struct Raster {
     width: u32,
     height: u32,
-    data: Vec<u8>,
+    /// Shared until written (copy-on-write), so cloning a project for undo or autosave costs
+    /// nothing until a layer is painted.
+    data: Arc<Vec<u8>>,
 }
 
 /// What a stroke does to the layer.
@@ -85,7 +89,7 @@ impl Raster {
         for _ in 0..n {
             data.extend_from_slice(&rgba);
         }
-        Self { width, height, data }
+        Self { width, height, data: Arc::new(data) }
     }
 
     /// Wrap RGBA8 bytes; `None` when the length does not match or a side is out of range.
@@ -94,7 +98,7 @@ impl Raster {
             return None;
         }
         let expected = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
-        (data.len() == expected).then_some(Self { width, height, data })
+        (data.len() == expected).then(|| Self { width, height, data: Arc::new(data) })
     }
 
     pub fn width(&self) -> u32 {
@@ -111,6 +115,11 @@ impl Raster {
     }
 
     /// Whether this is the empty default (0 × 0) raster.
+    /// Whether two rasters share the same pixel buffer (no copy was made).
+    pub fn shares_pixels(&self, other: &Raster) -> bool {
+        Arc::ptr_eq(&self.data, &other.data)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -141,7 +150,7 @@ impl Raster {
 
     /// Composite `color` (straight alpha) with `coverage` (0..=1) over the pixel at `i`.
     fn paint_px(&mut self, i: usize, color: [u8; 4], coverage: f32) {
-        let Some(px) = self.data.get_mut(i..i + 4) else { return };
+        let Some(px) = Arc::make_mut(&mut self.data).get_mut(i..i + 4) else { return };
         let a = (color[3] as f32 / 255.0) * coverage.clamp(0.0, 1.0);
         if a <= 0.0 {
             return;
@@ -159,7 +168,7 @@ impl Raster {
     }
 
     fn erase_px(&mut self, i: usize, strength: f32) {
-        let Some(px) = self.data.get_mut(i + 3) else { return };
+        let Some(px) = Arc::make_mut(&mut self.data).get_mut(i + 3) else { return };
         let keep = 1.0 - strength.clamp(0.0, 1.0);
         *px = (*px as f32 * keep).round().clamp(0.0, 255.0) as u8;
     }
@@ -285,7 +294,7 @@ impl Raster {
                 let n = (ss * ss) as f32;
                 let a = acc[3] / n;
                 let i = (y as usize * w as usize + x as usize) * 4;
-                if let Some(px) = out.data.get_mut(i..i + 4) {
+                if let Some(px) = Arc::make_mut(&mut out.data).get_mut(i..i + 4) {
                     if a > 0.0 {
                         for c in 0..3 {
                             px[c] = (acc[c] / n / a * 255.0).round().clamp(0.0, 255.0) as u8;
@@ -301,6 +310,57 @@ impl Raster {
     /// A copy scaled to `width × height`.
     pub fn resized(&self, width: u32, height: u32) -> Raster {
         self.render_view([0.0, 0.0, 1.0, 1.0], width, height)
+    }
+
+    /// A copy of the rectangle `x, y, w, h` (clamped to the canvas).
+    pub fn crop(&self, x: u32, y: u32, w: u32, h: u32) -> Raster {
+        let x = x.min(self.width.saturating_sub(1));
+        let y = y.min(self.height.saturating_sub(1));
+        let w = w.clamp(1, self.width - x);
+        let h = h.clamp(1, self.height - y);
+        let mut out = Raster::new(w, h);
+        let data = Arc::make_mut(&mut out.data);
+        for row in 0..h {
+            let s0 = ((y + row) as usize * self.width as usize + x as usize) * 4;
+            let d0 = row as usize * w as usize * 4;
+            let n = w as usize * 4;
+            if let (Some(src), Some(dst)) = (self.data.get(s0..s0 + n), data.get_mut(d0..d0 + n)) {
+                dst.copy_from_slice(src);
+            }
+        }
+        out
+    }
+
+    /// The same pixels on a `width × height` canvas, centred: cropped where smaller, transparent
+    /// where larger. No resampling.
+    pub fn recanvas(&self, width: u32, height: u32) -> Raster {
+        let mut out = Raster::new(width, height);
+        if self.is_empty() {
+            return out;
+        }
+        let ox = (out.width as i64 - self.width as i64) / 2;
+        let oy = (out.height as i64 - self.height as i64) / 2;
+        let row = self.width as usize * 4;
+        let data = Arc::make_mut(&mut out.data);
+        for y in 0..self.height as i64 {
+            let ty = y + oy;
+            if ty < 0 || ty >= out.height as i64 {
+                continue;
+            }
+            let x0 = ox.max(0);
+            let x1 = (ox + self.width as i64).min(out.width as i64);
+            if x0 >= x1 {
+                continue;
+            }
+            let src_x = (x0 - ox) as usize;
+            let n = (x1 - x0) as usize * 4;
+            let s0 = y as usize * row + src_x * 4;
+            let d0 = (ty as usize * out.width as usize + x0 as usize) * 4;
+            if let (Some(src), Some(dst)) = (self.data.get(s0..s0 + n), data.get_mut(d0..d0 + n)) {
+                dst.copy_from_slice(src);
+            }
+        }
+        out
     }
 
     /// Composite `top` over this raster with `opacity`. `top` is resampled when sizes differ.
@@ -348,8 +408,8 @@ impl Raster {
     /// Encode as PNG (through `craft-image-codecs`).
     pub fn to_png(&self) -> crate::Result<Vec<u8>> {
         use craft_image_codecs::{ChannelLayout, EncodeOptions, Format, Image, SampleType};
-        let img =
-            Image::from_raw(self.width, self.height, ChannelLayout::Rgba, SampleType::U8, self.data.clone()).map_err(|e| crate::Error::Image(e.to_string()))?;
+        let img = Image::from_raw(self.width, self.height, ChannelLayout::Rgba, SampleType::U8, self.data.to_vec())
+            .map_err(|e| crate::Error::Image(e.to_string()))?;
         craft_image_codecs::encode(&img, Format::Png, &EncodeOptions::default()).map_err(|e| crate::Error::Image(e.to_string()))
     }
 
@@ -434,6 +494,29 @@ mod tests {
         let half = paper.render_view([0.0, 0.0, 0.5, 0.5], 10, 10);
         assert_eq!(half.width(), 10);
         assert_eq!(half.pixel(9, 9)[3], 255);
+    }
+
+    #[test]
+    fn recanvas_crops_and_extends_without_stretching() {
+        let mut r = Raster::new(10, 10);
+        r.dab(StrokePoint::new(5.0, 5.0, 1.0), &Brush { radius: 1.0, hardness: 1.0, ..Brush::default() });
+        let wide = r.recanvas(20, 10);
+        assert_eq!((wide.width(), wide.height()), (20, 10));
+        assert_eq!(wide.pixel(10, 5), r.pixel(5, 5));
+        assert_eq!(wide.pixel(1, 5)[3], 0);
+        let small = r.recanvas(4, 4);
+        assert_eq!(small.pixel(2, 2), r.pixel(5, 5));
+        assert!(Raster::default().recanvas(3, 3).is_blank());
+    }
+
+    #[test]
+    fn clones_share_pixels_until_painted() {
+        let a = Raster::new(32, 32);
+        let mut b = a.clone();
+        assert!(a.shares_pixels(&b));
+        b.dab(StrokePoint::new(16.0, 16.0, 1.0), &Brush::default());
+        assert!(!a.shares_pixels(&b));
+        assert!(a.is_blank() && !b.is_blank());
     }
 
     #[test]

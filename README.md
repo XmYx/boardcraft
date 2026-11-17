@@ -32,12 +32,20 @@ time the panels and play the animatic, then send the cut to FilmCraft.
 
 ## What works today
 
+- **Your work is safe.** Autosave every 30 seconds, crash recovery at the next start, undo and
+  redo for every edit (strokes, text, structure, settings), atomic saves.
+
 - **Scenes and panels.** A board is scenes (number, heading) holding panels. Add, delete and reorder
   panels (across scene boundaries too).
 - **Drawing.** Round brush with soft edge, size, colour and opacity; pen pressure (from tablets
-  that report it) can drive size and opacity; eraser; layers with visibility and opacity; image
-  import onto a layer (PNG, JPEG, WebP, TIFF, BMP, GIF through `craft-image-codecs`); pixel undo.
-- **Panel text.** Dialogue, action and notes fields per panel.
+  that report it) can drive size and opacity; eraser; Shift-click straight lines; layers with
+  visibility and opacity; image import; canvas zoom and pan; onion skin of the previous panel;
+  **Edit in Image Editor** sends a layer to GIMP, Krita, Photoshop or any editor and reloads it
+  when you save there.
+- **Board Settings.** Change the frame size and aspect ratio (16:9, 1.85, 2.39, 4:3, 1:1, 9:16,
+  4:5) and the frame rate (23.976 to 60 fps) at any time, without stretching drawings or losing
+  timing.
+- **Panel text.** Shot type (with presets), dialogue, action and notes per panel; duplicate panels.
 - **Timing.** Each panel has a duration in frames; drag a panel's edge on the timeline to retime it.
 - **Camera.** Pan and zoom keyframes per panel (start and end), eased, edited by dragging and
   scrolling in the Panel view; the camera frames are drawn over the drawing.
@@ -57,6 +65,7 @@ time the panels and play the animatic, then send the cut to FilmCraft.
 - **Board sheets.** Printable PDF pages (A4 or Letter, 3 or 6 panels a page; any grid from the
   CLI) with each panel's picture, number, duration, scene heading, dialogue, action and notes, as
   selectable text (craft-pdf).
+- **Shot list.** CSV with scene, panel, shot, start timecode, duration and text.
 - **Panel images.** Export every panel as a PNG.
 - **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer,
   documented in [docs/file-format.md](docs/file-format.md). Saves are atomic.
@@ -93,8 +102,13 @@ cargo run --release -p boardcraft -- my.boardcraft   # open a project
 | B / E / C | brush / eraser / camera tool |
 | [ ] | smaller / larger brush |
 | Ctrl+S, Ctrl+Shift+S, Ctrl+O | save, save as, open |
-| Ctrl+Z, Ctrl+Shift+Z | undo / redo drawing |
-| Ctrl+N | new panel after the selected one |
+| Ctrl+Z, Ctrl+Shift+Z | undo / redo (every edit) |
+| Ctrl+N / Ctrl+D | new panel / duplicate panel after the selected one |
+| Ctrl+, | Board Settings |
+| O | onion skin |
+| Ctrl+wheel, + / −, 0 | zoom the canvas, fit it |
+| middle-drag, Alt+drag | pan the canvas |
+| Shift+click | straight line from the end of the last stroke |
 
 Optional build inputs (never Cargo dependencies), as in the other Craft apps:
 

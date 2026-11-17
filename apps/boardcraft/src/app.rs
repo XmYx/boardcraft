@@ -19,9 +19,6 @@ const SCRIPT_EXTENSIONS: &[&str] = &["fountain", "spmd", "txt", "fdx", "json"];
 use crate::args::{Cli, StartView};
 use crate::textures::Textures;
 
-/// Most pixel undo steps kept.
-const UNDO_LIMIT: usize = 40;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum View {
     /// Panel grid, grouped by scene.
@@ -44,13 +41,6 @@ pub enum CanvasTool {
 pub enum KeyChoice {
     Start,
     End,
-}
-
-/// One undoable change to a layer's pixels.
-pub struct PixelUndo {
-    pub panel: Id,
-    pub layer: Id,
-    pub pixels: Raster,
 }
 
 /// A stroke in progress.
@@ -78,8 +68,11 @@ pub struct BoardApp {
     pub timeline_ppf: f32,
     pub textures: Textures,
     pub status: String,
-    pub undo: Vec<PixelUndo>,
-    pub redo: Vec<PixelUndo>,
+    pub history: crate::history::History,
+    /// Counts document edits; a frame that changes it becomes an undo step.
+    pub edits: u64,
+    /// Counts pointer presses, to group one press's edits into one undo step.
+    press: u64,
     pub stroke: Option<StrokeState>,
     /// Last pen pressure seen from a touch/pen device (None: mouse, full pressure).
     pub pen_pressure: Option<f32>,
@@ -93,6 +86,20 @@ pub struct BoardApp {
     pub focus_selected: bool,
     /// Interface language code, `None` = the system's.
     pub language: Option<String>,
+    pub autosave: crate::autosave::Autosave,
+    /// Show the previous panel faintly under the drawing (onion skin).
+    pub onion: bool,
+    /// Canvas view zoom (1 = fit) and pan in screen points.
+    pub canvas_zoom: f32,
+    pub canvas_pan: egui::Vec2,
+    /// Board Settings dialog state, when open.
+    pub settings_dialog: Option<crate::settings::Dialog>,
+    /// Layers being edited in an external image editor.
+    pub external: Vec<crate::external::Watch>,
+    /// Where the last stroke ended (panel, layer, point), for Shift-click straight lines.
+    pub last_point: Option<(Id, Id, boardcraft_core::StrokePoint)>,
+    /// Boards a crashed session left; offered at start.
+    pub recoverable: Vec<crate::autosave::Recoverable>,
 }
 
 fn pick_layer(project: &Project, panel: Option<Id>) -> Option<Id> {
@@ -127,8 +134,9 @@ impl BoardApp {
             timeline_ppf: 2.0,
             textures: Textures::default(),
             status: String::new(),
-            undo: Vec::new(),
-            redo: Vec::new(),
+            history: Default::default(),
+            edits: 0,
+            press: 0,
             stroke: None,
             pen_pressure: None,
             confirm_close: false,
@@ -139,7 +147,20 @@ impl BoardApp {
             last_title: String::new(),
             focus_selected: false,
             language: None,
+            autosave: crate::autosave::Autosave::new(if cli.screenshot.is_some() {
+                None
+            } else {
+                cli.data_dir.clone().or_else(crate::autosave::default_data_dir)
+            }),
+            recoverable: Vec::new(),
+            onion: false,
+            canvas_zoom: 1.0,
+            canvas_pan: egui::Vec2::ZERO,
+            settings_dialog: None,
+            external: Vec::new(),
+            last_point: None,
         };
+        app.recoverable = app.autosave.recoverable();
         if cli.demo {
             app.replace_project(boardcraft_core::demo::demo_project(), None);
             app.status = tl!("Demo board: Paper Boats").into();
@@ -160,8 +181,7 @@ impl BoardApp {
         self.path = path;
         self.dirty = false;
         self.textures.clear();
-        self.undo.clear();
-        self.redo.clear();
+        self.history.clear();
         self.stroke = None;
         self.playing = false;
         self.playhead = 0.0;
@@ -202,7 +222,7 @@ impl BoardApp {
                     let project = fountain::project_from_script(&script, Default::default());
                     let n = project.panel_count();
                     self.replace_project(project, None);
-                    self.dirty = true;
+                    self.edited();
                     self.status = tlf!("Boarded {scenes} scenes, {n} panels from {file}", scenes = script.scenes.len(), n = n, file = path.display());
                 }
                 Err(e) => self.status = tlf!("Could not read {file}: {error}", file = path.display(), error = e),
@@ -254,6 +274,7 @@ impl BoardApp {
             Ok(()) => {
                 self.path = Some(path.to_path_buf());
                 self.dirty = false;
+                self.autosave.clear();
                 self.status = tlf!("Saved {file}", file = path.display());
                 true
             }
@@ -282,7 +303,7 @@ impl BoardApp {
                 Ok(s) => {
                     let p = fountain::project_from_script(&s, self.project.settings);
                     self.replace_project(p, None);
-                    self.dirty = true;
+                    self.edited();
                     self.status = tlf!("Boarded {scenes} scenes from {file}", scenes = s.scenes.len(), file = path.display());
                 }
                 Err(e) => self.status = tlf!("Could not import {file}: {error}", file = path.display(), error = e),
@@ -331,7 +352,7 @@ impl BoardApp {
                     p.touch();
                 }
                 self.active_layer = Some(id);
-                self.dirty = true;
+                self.edited();
                 self.status = tlf!("Imported {file}", file = path.display());
             }
             Err(e) => self.status = tlf!("Could not import {file}: {error}", file = path.display(), error = e),
@@ -396,7 +417,7 @@ impl BoardApp {
                     p.layers.insert(0, layer);
                     p.touch();
                 }
-                self.dirty = true;
+                self.edited();
             }
             Err(e) => self.status = e.to_string(),
         }
@@ -410,7 +431,7 @@ impl BoardApp {
     pub fn run(&mut self, cmd: Command) -> Option<boardcraft_core::command::Outcome> {
         match command::apply(&mut self.project, &cmd) {
             Ok(out) => {
-                self.dirty = true;
+                self.edited();
                 self.textures.retain(&self.project);
                 Some(out)
             }
@@ -428,6 +449,27 @@ impl BoardApp {
         }
     }
 
+    pub fn duplicate_panel(&mut self) {
+        let Some(panel) = self.selected else { return };
+        if let Some(id) = self.run(Command::DuplicatePanel { panel }).and_then(|o| o.created) {
+            self.select_and_seek(id);
+            self.focus_selected = true;
+        }
+    }
+
+    pub fn export_shot_list(&mut self) {
+        let Some(mut path) = Self::dialog().add_filter("CSV", &["csv"]).set_file_name(format!("{} shot list.csv", self.project.name)).save_file() else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("csv");
+        }
+        match boardcraft_core::format::write_atomic(&path, boardcraft_core::shotlist::csv(&self.project).as_bytes()) {
+            Ok(()) => self.status = tlf!("Wrote the shot list {file}", file = path.display()),
+            Err(e) => self.status = tlf!("Export failed: {error}", error = e),
+        }
+    }
+
     pub fn add_scene(&mut self) {
         if let Some(id) = self.run(Command::AddScene { heading: "NEW SCENE".into() }).and_then(|o| o.created) {
             self.select_and_seek(id);
@@ -442,8 +484,6 @@ impl BoardApp {
             ids.get(i + 1).or_else(|| i.checked_sub(1).and_then(|j| ids.get(j))).copied()
         };
         if self.run(Command::DeletePanel { panel: id }).is_some() {
-            self.undo.retain(|u| u.panel != id);
-            self.redo.retain(|u| u.panel != id);
             self.select(next);
         }
     }
@@ -464,42 +504,39 @@ impl BoardApp {
         }
     }
 
-    /// Record a layer's pixels before a change.
-    pub fn push_undo(&mut self, panel: Id, layer: Id) {
-        if let Some(l) = self.project.panel(panel).and_then(|p| p.layer(layer)) {
-            self.undo.push(PixelUndo { panel, layer, pixels: l.pixels.clone() });
-            if self.undo.len() > UNDO_LIMIT {
-                self.undo.remove(0);
-            }
-            self.redo.clear();
-        }
+    /// The document changed: mark it unsaved and count the edit (for undo).
+    pub fn edited(&mut self) {
+        self.dirty = true;
+        self.edits = self.edits.wrapping_add(1);
     }
 
-    fn swap_pixels(&mut self, step: PixelUndo) -> Option<PixelUndo> {
-        let p = self.project.panel_mut(step.panel)?;
-        let l = p.layer_mut(step.layer)?;
-        let old = std::mem::replace(&mut l.pixels, step.pixels);
-        p.touch();
-        Some(PixelUndo { panel: step.panel, layer: step.layer, pixels: old })
+    fn snapshot(&self) -> crate::history::Snapshot {
+        crate::history::Snapshot { project: self.project.clone(), selected: self.selected, dirty: self.dirty }
+    }
+
+    fn restore(&mut self, s: crate::history::Snapshot) {
+        self.project = s.project;
+        self.dirty = s.dirty;
+        self.stroke = None;
+        // Restored panels may carry revisions the texture cache has seen with other pixels.
+        self.textures.clear();
+        let keep = s.selected.filter(|id| self.project.panel(*id).is_some());
+        self.select(keep.or_else(|| self.project.panels().next().map(|(_, p)| p.id)));
     }
 
     pub fn undo(&mut self) {
-        if let Some(step) = self.undo.pop() {
-            let panel = step.panel;
-            if let Some(back) = self.swap_pixels(step) {
-                self.redo.push(back);
-                self.select(Some(panel));
-                self.dirty = true;
-            }
+        let current = self.snapshot();
+        if let Some(s) = self.history.undo(current) {
+            self.restore(s);
+            self.status = tl!("Undone").into();
         }
     }
 
     pub fn redo(&mut self) {
-        if let Some(step) = self.redo.pop()
-            && let Some(back) = self.swap_pixels(step)
-        {
-            self.undo.push(back);
-            self.dirty = true;
+        let current = self.snapshot();
+        if let Some(s) = self.history.redo(current) {
+            self.restore(s);
+            self.status = tl!("Redone").into();
         }
     }
 
@@ -526,7 +563,7 @@ impl BoardApp {
             return;
         }
         let dt = ctx.input(|i| i.stable_dt).clamp(0.0, 0.25) as f64;
-        self.playhead += dt * self.project.settings.fps.max(1) as f64;
+        self.playhead += dt * self.project.settings.fps_f64();
         let total = self.project.total_frames() as f64;
         if self.playhead >= total {
             self.playhead = (total - 1.0).max(0.0);
@@ -560,6 +597,13 @@ impl BoardApp {
             let undo = i.consume_shortcut(&cmd(Key::Z));
             (save_as, save, open, redo, undo, i.consume_shortcut(&cmd(Key::N)))
         });
+        let (duplicate, settings) = ctx.input_mut(|i| (i.consume_shortcut(&cmd(Key::D)), i.consume_shortcut(&cmd(Key::Comma))));
+        if duplicate {
+            self.duplicate_panel();
+        }
+        if settings {
+            self.settings_dialog = Some(crate::settings::Dialog::new(&self.project));
+        }
         if save_as {
             self.save_as();
         } else if save {
@@ -621,6 +665,21 @@ impl BoardApp {
         if b {
             self.tool = CanvasTool::Brush;
         }
+        let (onion, fit, zoom_in, zoom_out) =
+            ctx.input(|i| (i.key_pressed(Key::O), i.key_pressed(Key::Num0), i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals), i.key_pressed(Key::Minus)));
+        if onion {
+            self.onion = !self.onion;
+        }
+        if fit {
+            self.canvas_zoom = 1.0;
+            self.canvas_pan = egui::Vec2::ZERO;
+        }
+        if zoom_in {
+            self.canvas_zoom = (self.canvas_zoom * 1.25).min(16.0);
+        }
+        if zoom_out {
+            self.canvas_zoom = (self.canvas_zoom / 1.25).max(0.25);
+        }
         if e {
             self.tool = CanvasTool::Eraser;
         }
@@ -639,8 +698,9 @@ impl BoardApp {
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button(tl!("File"), |ui| {
-                if ui.button(tl!("New Board")).clicked() {
+                if ui.button(tl!("New Board…")).clicked() {
                     self.replace_project(Project::blank("Untitled board"), None);
+                    self.settings_dialog = Some(crate::settings::Dialog::new(&self.project));
                 }
                 if ui.button(tl!("Open…")).clicked() {
                     self.open_dialog();
@@ -690,6 +750,9 @@ impl BoardApp {
                         }
                     }
                 });
+                if ui.button(tl!("Export Shot List (CSV)…")).clicked() {
+                    self.export_shot_list();
+                }
                 if ui.button(tl!("Export Panel Images (PNG)…")).clicked() {
                     self.export_pngs();
                 }
@@ -699,15 +762,18 @@ impl BoardApp {
                 }
             });
             ui.menu_button(tl!("Edit"), |ui| {
-                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new(tl!("Undo Drawing"))).clicked() {
+                if ui.add_enabled(self.history.can_undo(), egui::Button::new(tl!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
                     self.undo();
                 }
-                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new(tl!("Redo Drawing"))).clicked() {
+                if ui.add_enabled(self.history.can_redo(), egui::Button::new(tl!("Redo")).shortcut_text("Ctrl+Shift+Z")).clicked() {
                     self.redo();
                 }
                 ui.separator();
-                if ui.button(tl!("New Panel")).clicked() {
+                if ui.add(egui::Button::new(tl!("New Panel")).shortcut_text("Ctrl+N")).clicked() {
                     self.add_panel();
+                }
+                if ui.add(egui::Button::new(tl!("Duplicate Panel")).shortcut_text("Ctrl+D")).clicked() {
+                    self.duplicate_panel();
                 }
                 if ui.button(tl!("New Scene")).clicked() {
                     self.add_scene();
@@ -722,6 +788,10 @@ impl BoardApp {
                 if ui.button(tl!("Move Panel Later")).clicked() {
                     self.move_panel(true);
                 }
+                ui.separator();
+                if ui.add(egui::Button::new(tl!("Board Settings…")).shortcut_text("Ctrl+,")).clicked() {
+                    self.settings_dialog = Some(crate::settings::Dialog::new(&self.project));
+                }
             });
             ui.menu_button(tl!("View"), |ui| {
                 ui.radio_value(&mut self.view, View::Board, tl!("Board (panel grid)"));
@@ -729,6 +799,11 @@ impl BoardApp {
                 ui.separator();
                 if ui.button(if self.playing { tl!("Pause Animatic") } else { tl!("Play Animatic") }).clicked() {
                     self.toggle_play();
+                }
+                ui.checkbox(&mut self.onion, tl!("Onion Skin (O)"));
+                if ui.button(tl!("Fit Canvas (0)")).clicked() {
+                    self.canvas_zoom = 1.0;
+                    self.canvas_pan = egui::Vec2::ZERO;
                 }
                 ui.separator();
                 ui.menu_button(tl!("Language"), |ui| {
@@ -785,6 +860,56 @@ impl BoardApp {
         });
     }
 
+    /// Offer boards a crashed session left unsaved.
+    fn recovery_dialog(&mut self, ctx: &egui::Context) {
+        if self.recoverable.is_empty() {
+            return;
+        }
+        let mut action: Option<(usize, bool)> = None;
+        let mut later = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        egui::Window::new(tl!("Recover unsaved work")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+            ui.label(tl!("BoardCraft closed before these boards were saved. Recover them?"));
+            ui.separator();
+            for (i, r) in self.recoverable.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    let name = if r.name.is_empty() { tl!("Untitled board").to_string() } else { r.name.clone() };
+                    ui.label(tlf!("{name}, autosaved {time}", name = name, time = r.saved));
+                    if ui.button(tlf!("Recover {name}", name = name)).clicked() {
+                        action = Some((i, true));
+                    }
+                    if ui.button(tlf!("Discard {name}", name = name)).clicked() {
+                        action = Some((i, false));
+                    }
+                });
+            }
+            ui.separator();
+            if ui.button(tl!("Decide Later")).on_hover_text(tl!("Keep the autosaves and ask again next time")).clicked() {
+                later = true;
+            }
+        });
+        if later {
+            self.recoverable.clear();
+            return;
+        }
+        let Some((i, recover)) = action else { return };
+        if i >= self.recoverable.len() {
+            return;
+        }
+        let r = self.recoverable.remove(i);
+        if recover {
+            match self.autosave.recover(&r) {
+                Ok(p) => {
+                    self.replace_project(p, r.document.clone());
+                    self.edited();
+                    self.status = tl!("Recovered unsaved work. Save it to keep it.").into();
+                }
+                Err(e) => self.status = tlf!("Could not recover: {error}", error = e),
+            }
+        } else {
+            crate::autosave::Autosave::discard(&r);
+        }
+    }
+
     fn screenshot_step(&mut self, ctx: &egui::Context) {
         let Some(path) = self.screenshot.clone() else { return };
         if self.shot_done.load(Ordering::SeqCst) {
@@ -833,11 +958,25 @@ impl eframe::App for BoardApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.draw(ui);
     }
+
+    fn on_exit(&mut self) {
+        // A clean exit (saved, or the user chose Don't Save) leaves nothing to recover.
+        if !self.dirty || self.close_confirmed {
+            self.autosave.clear();
+        }
+    }
 }
 
 impl BoardApp {
     /// Per-frame work outside the UI pass: close requests, playback, window title.
     pub fn tick(&mut self, ctx: &egui::Context) {
+        if let Some(e) = self.autosave.tick(&self.project, self.path.as_deref(), self.dirty, self.edits) {
+            self.status = tlf!("Autosave failed: {error}", error = e);
+        }
+        if self.dirty {
+            // Keep frames coming so autosave runs while the user is idle.
+            ctx.request_repaint_after(crate::autosave::INTERVAL);
+        }
         if ctx.input(|i| i.viewport().close_requested()) && self.dirty && !self.close_confirmed && self.screenshot.is_none() {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirm_close = true;
@@ -853,11 +992,28 @@ impl BoardApp {
     /// The whole window.
     pub fn draw(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        if ctx.input(|i| i.pointer.any_pressed()) {
+            self.press = self.press.wrapping_add(1);
+        }
+        self.history.begin_frame(&self.project, self.selected, self.dirty, self.edits);
+        self.draw_inner(ui, &ctx);
+        let gesture = if ctx.input(|i| i.pointer.any_down() || i.pointer.any_released()) {
+            crate::history::Gesture::Press(self.press)
+        } else if let Some(id) = ctx.memory(|m| m.focused()) {
+            crate::history::Gesture::Focus(id)
+        } else {
+            crate::history::Gesture::Other
+        };
+        self.history.end_frame(self.edits, gesture);
+    }
+
+    fn draw_inner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let ctx = ctx.clone();
         self.shortcuts(&ctx);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
-                let fps = self.project.settings.fps.max(1) as f64;
+                let fps = self.project.settings.fps_f64();
                 ui.label(tlf!(
                     "{scenes} scenes · {panels} panels · {seconds} s",
                     scenes = self.project.scenes.len(),
@@ -877,6 +1033,9 @@ impl BoardApp {
             View::Panel => crate::canvas::show(self, ui),
         });
         self.close_dialog(&ctx);
+        self.recovery_dialog(&ctx);
+        crate::settings::show(self, &ctx);
+        crate::external::poll(self, &ctx);
         self.screenshot_step(&ctx);
     }
 }

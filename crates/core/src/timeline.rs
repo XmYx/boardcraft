@@ -84,7 +84,8 @@ impl TimelineFormat {
 }
 
 fn rate(project: &Project) -> FrameRate {
-    FrameRate::new(project.settings.fps.max(1) as i64, 1)
+    let (n, d) = project.settings.rate();
+    FrameRate::new(n as i64, d as i64)
 }
 
 /// The board as a `craft-timeline` project with one sequence (returned), stills in `stills_dir`.
@@ -125,7 +126,7 @@ pub fn to_model(project: &Project, stills_dir: &Path) -> (craft_timeline::model:
                 json!({
                     "panel_id": panel.id.0, "panel": label, "scene": scene.number, "heading": scene.heading,
                     "scene_id": scene.source_scene_id, "dialogue": panel.dialogue, "action": panel.action,
-                    "notes": panel.notes, "camera": panel.camera.keys,
+                    "notes": panel.notes, "shot": panel.shot, "camera": panel.camera.keys,
                 })
                 .to_string(),
             );
@@ -298,7 +299,7 @@ fn edit_clips(path: &Path, bytes: &[u8]) -> Result<(TimelineFormat, Vec<EditClip
 /// Take panel timing from an edited timeline (any [`TimelineFormat`]).
 pub fn conform(project: &mut Project, path: &Path, bytes: &[u8]) -> Result<ConformReport> {
     let (format, clips) = edit_clips(path, bytes)?;
-    let fps = project.settings.fps.max(1) as f64;
+    let fps = project.settings.fps_f64();
     // Lookups by the names this board's exports use.
     let mut by_label: HashMap<String, Id> = HashMap::new();
     let mut by_file: HashMap<String, Id> = HashMap::new();
@@ -344,7 +345,7 @@ mod tests {
 
     fn board() -> Project {
         let script = fountain::parse("INT. A #1#\n\n[[scene-id: s1]]\n\nA door opens.\n\nBOB\nHello there.\n\nEXT. B\n\nRain.\n");
-        fountain::project_from_script(&script, Settings { width: 64, height: 36, fps: 24 })
+        fountain::project_from_script(&script, Settings { width: 64, height: 36, fps: 24, ntsc: false })
     }
 
     #[test]

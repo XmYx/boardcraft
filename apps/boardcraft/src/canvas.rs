@@ -71,8 +71,27 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     if w < 8.0 || h < 8.0 {
         return;
     }
-    let rect = egui::Rect::from_center_size(avail.center(), egui::vec2(w, h));
-    let resp = ui.allocate_rect(rect, egui::Sense::drag());
+    // View zoom (1 = fit) and pan; the whole area takes input so panning works off the canvas.
+    let zoom = app.canvas_zoom.clamp(0.25, 16.0);
+    let rect = egui::Rect::from_center_size(avail.center() + app.canvas_pan, egui::vec2(w * zoom, h * zoom));
+    let resp = ui.allocate_rect(avail, egui::Sense::drag());
+    if resp.hovered() {
+        // Ctrl+wheel or pinch zooms about the pointer; middle-drag or Alt+drag pans.
+        let dz = ui.input(|i| i.zoom_delta());
+        if (dz - 1.0).abs() > f32::EPSILON
+            && let Some(pos) = resp.hover_pos()
+        {
+            let new = (zoom * dz).clamp(0.25, 16.0);
+            let k = new / zoom;
+            let rel = pos - (avail.center() + app.canvas_pan);
+            app.canvas_pan += rel - rel * k;
+            app.canvas_zoom = new;
+        }
+    }
+    let panning = ui.input(|i| i.pointer.middle_down() || (i.modifiers.alt && i.pointer.primary_down()));
+    if panning && resp.dragged() {
+        app.canvas_pan += resp.drag_delta();
+    }
     // The canvas publishes what it shows: which panel, its layers and its camera.
     let description = match app.project.panel(panel_id) {
         Some(p) => tlf!(
@@ -90,7 +109,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let Some(panel) = app.project.panel(panel_id) else { return };
     let duration = panel.duration.max(1);
     let tex = app.textures.full(ui.ctx(), &app.project, panel);
-    let painter = ui.painter_at(ui.max_rect());
+    let painter = ui.painter_at(avail.expand(12.0));
     if app.playing {
         // The animatic: what the camera sees.
         let v = panel.camera.view(local.min(duration as f32 - 1.0));
@@ -112,8 +131,16 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         }
         return;
     }
-    painter.rect_filled(rect.expand(12.0), 0.0, egui::Color32::from_gray(40));
+    painter.rect_filled(avail.expand(12.0), 0.0, egui::Color32::from_gray(40));
     painter.image(tex, rect, FULL_UV, egui::Color32::WHITE);
+    // Onion skin: the previous panel, faint and tinted, over the drawing.
+    if app.onion
+        && let Some(prev) = app.project.panels().map(|(_, p)| p.id).take_while(|id| *id != panel_id).last()
+        && let Some(prev_panel) = app.project.panel(prev)
+    {
+        let ptex = app.textures.full(ui.ctx(), &app.project, prev_panel);
+        painter.image(ptex, rect, FULL_UV, egui::Color32::from_rgba_unmultiplied(255, 110, 110, 60));
+    }
 
     // Camera frames: start key, end key, and the frame at the playhead.
     let has_keys = !panel.camera.keys.is_empty();
@@ -129,6 +156,9 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     }
 
     let to_canvas = |p: egui::Pos2| ((p.x - rect.left()) / rect.width() * settings.width as f32, (p.y - rect.top()) / rect.height() * settings.height as f32);
+    if panning {
+        return;
+    }
     match app.tool {
         CanvasTool::Brush | CanvasTool::Eraser => {
             if let Some(pos) = resp.hover_pos() {
@@ -144,18 +174,25 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             {
                 match app.active_layer.filter(|l| app.project.panel(panel_id).is_some_and(|p| p.layer(*l).is_some_and(|l| l.visible))) {
                     Some(layer) => {
-                        app.push_undo(panel_id, layer);
                         let (x, y) = to_canvas(pos);
                         let pt = StrokePoint::new(x, y, pressure);
                         let brush = app.active_brush();
-                        if let Some(p) = app.project.panel_mut(panel_id) {
-                            if let Some(l) = p.layer_mut(layer) {
-                                l.pixels.dab(pt, &brush);
+                        // Shift: a straight line from where the last stroke on this layer ended.
+                        let from = app.last_point.filter(|(p, l, _)| ui.input(|i| i.modifiers.shift) && *p == panel_id && *l == layer).map(|(_, _, q)| q);
+                        match from {
+                            Some(q) => draw_segment(app, panel_id, layer, q, pt, &brush),
+                            None => {
+                                if let Some(p) = app.project.panel_mut(panel_id) {
+                                    if let Some(l) = p.layer_mut(layer) {
+                                        l.pixels.dab(pt, &brush);
+                                    }
+                                    p.touch();
+                                }
+                                patch(app, panel_id, pt, pt, &brush);
                             }
-                            p.touch();
                         }
                         app.stroke = Some(StrokeState { panel: panel_id, layer, last: pt });
-                        app.dirty = true;
+                        app.edited();
                     }
                     None => app.status = tl!("Select a visible layer to draw on").into(),
                 }
@@ -171,7 +208,9 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                 draw_segment(app, pid, lid, last, pt, &brush);
             }
             if resp.drag_stopped() {
-                app.stroke = None;
+                if let Some(s) = app.stroke.take() {
+                    app.last_point = Some((s.panel, s.layer, s.last));
+                }
                 app.pen_pressure = None;
             }
         }
@@ -193,7 +232,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                     key.zoom *= (scroll * 0.003).exp();
                     p.camera.set_key(key);
                 }
-                app.dirty = true;
+                app.edited();
             }
         }
     }
@@ -205,5 +244,19 @@ fn draw_segment(app: &mut BoardApp, panel: Id, layer: Id, from: StrokePoint, to:
             l.pixels.stroke(from, to, brush);
         }
         p.touch();
+    }
+    patch(app, panel, from, to, brush);
+}
+
+/// Update only the touched part of the panel's texture (no full re-upload per dab).
+fn patch(app: &mut BoardApp, panel: Id, a: StrokePoint, b: StrokePoint, brush: &boardcraft_core::Brush) {
+    let r = brush.radius.max(1.0) + 3.0;
+    let fin = |v: f32| if v.is_finite() { v } else { 0.0 };
+    let x0 = (fin(a.x.min(b.x)) - r).max(0.0) as u32;
+    let y0 = (fin(a.y.min(b.y)) - r).max(0.0) as u32;
+    let x1 = (fin(a.x.max(b.x)) + r).max(0.0).ceil() as u32;
+    let y1 = (fin(a.y.max(b.y)) + r).max(0.0).ceil() as u32;
+    if let Some(p) = app.project.panel(panel) {
+        app.textures.patch(&app.project, p, [x0, y0, x1, y1]);
     }
 }

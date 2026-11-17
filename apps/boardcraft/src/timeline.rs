@@ -10,7 +10,7 @@ pub const SCENE_COLORS: [egui::Color32; 4] =
     [egui::Color32::from_rgb(40, 90, 160), egui::Color32::from_rgb(160, 90, 20), egui::Color32::from_rgb(40, 120, 60), egui::Color32::from_rgb(130, 60, 130)];
 
 pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
-    let fps = app.project.settings.fps.max(1) as f64;
+    let fps = app.project.settings.fps_f64();
     ui.horizontal(|ui| {
         if ui.button(if app.playing { tl!("Pause") } else { tl!("Play") }).on_hover_text(tl!("Play the animatic (Space)")).clicked() {
             app.toggle_play();

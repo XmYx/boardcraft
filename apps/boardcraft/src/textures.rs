@@ -38,6 +38,21 @@ impl Textures {
         e.full.as_ref().map(|t| t.id()).unwrap_or_default()
     }
 
+    /// Re-composite only the rectangle `x0..x1, y0..y1` (canvas pixels) into the full texture, after
+    /// a brush dab: keeps drawing fast on large canvases.
+    pub fn patch(&mut self, project: &Project, panel: &Panel, rect: [u32; 4]) {
+        let Some(e) = self.map.get_mut(&panel.id) else { return };
+        let Some(tex) = e.full.as_mut() else { return };
+        let s = &project.settings;
+        let x0 = rect[0].min(s.width.saturating_sub(1));
+        let y0 = rect[1].min(s.height.saturating_sub(1));
+        let x1 = rect[2].clamp(x0 + 1, s.width);
+        let y1 = rect[3].clamp(y0 + 1, s.height);
+        let region = panel.composite_region(s, x0, y0, x1 - x0, y1 - y0);
+        tex.set_partial([x0 as usize, y0 as usize], image(&region), egui::TextureOptions::LINEAR);
+        e.revision = panel.revision;
+    }
+
     /// Downscaled composite for the board grid and timeline. `live` = false skips rebuilding while
     /// a stroke is in progress (the thumbnail catches up when it ends).
     pub fn thumb(&mut self, ctx: &egui::Context, project: &Project, panel: &Panel, live: bool) -> egui::TextureId {

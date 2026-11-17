@@ -43,6 +43,8 @@ An open, documented project format: a ZIP archive (PKWARE APPNOTE) any tool can 
 |---|---|
 | `settings.width`, `height` | canvas size in pixels, 16–8192 |
 | `settings.fps` | whole frames per second, 1–240 |
+| `settings.ntsc` | optional; `true` = `fps × 1000/1001` (23.976, 29.97, 59.94) |
+| `panel.shot` | optional shot type/size text |
 | `scene.number` | as written in the script (`"12A"`), or assigned in order |
 | `scene.source_scene_id` | stable id of the scene in the screenplay, or `""` |
 | `panel.duration` | frames, ≥ 1 |

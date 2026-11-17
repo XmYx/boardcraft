@@ -313,7 +313,7 @@ pub fn estimate_seconds(beat: &Beat) -> f32 {
 /// duration estimated from the text. Transitions become notes on the panel before them. A scene
 /// with no beats gets one empty panel. Ids come from `project`.
 pub fn scene_panels(project: &mut Project, scene: &ScriptScene) -> Vec<crate::model::Panel> {
-    let fps = project.settings.fps.max(1) as f32;
+    let fps = project.settings.fps_f64() as f32;
     let mut panels: Vec<crate::model::Panel> = Vec::new();
     for beat in &scene.beats {
         if let Beat::Transition(t) = beat

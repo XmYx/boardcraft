@@ -2,38 +2,51 @@
 
 ## Headline
 
-About 5% of a professional storyboard tool, by the features below weighted by everyday use. The
-pipeline hand-offs (script in, edit out) are the part that is furthest along.
+About **28%** of the professional reference (Toon Boom Storyboard Pro), up from about **19%** before
+the polish pass of 2026-11-17 (the earlier "~5%" headline predated the interchange work and was not
+re-measured then). Against the free tools users compare it with (Storyboarder, Boords' drawing,
+StudioBinder storyboards), BoardCraft is near or ahead on data safety, interchange and timing, and
+behind on drawing tools and audio.
 
 ## Target and how it was measured
 
-Target: Toon Boom Storyboard Pro, as a reference class for storyboarding and animatic tools. Studied
-only through public documentation and ordinary use; nothing was copied (see AGENTS.md, clean room).
-The estimate is a judgement per feature area, not a measurement.
+Target: Toon Boom Storyboard Pro, with Storyboarder, Boords, FrameForge, StudioBinder and
+Photoshop/Procreate board workflows as close competitors. Studied only through public documentation,
+ordinary use and published reviews ([user-research.md](user-research.md)); nothing was copied
+(AGENTS.md, clean room). Each dimension is a judgement of how much of the reference's everyday
+feature set works today, weighted by everyday use. Re-measured 2026-11-17.
 
 ## By dimension
 
-| Dimension | Weight | Parity |
-|---|---|---|
-| Board structure and navigation | 15% | 25% |
-| Drawing tools | 30% | 5% |
-| Camera and staging | 15% | 10% |
-| Timing, audio, playback | 15% | 10% |
-| Script import / export | 15% | 50% |
-| Printing and sharing | 10% | 35% |
+| Dimension | Weight | Before polish | Now | What moved it |
+|---|---|---|---|---|
+| Board structure and navigation | 15% | 25% | 40% | duplicate panel, Board Settings, keyboard focus and navigation |
+| Drawing tools | 30% | 5% | 12% | canvas zoom/pan, straight lines, onion skin, edit in any image editor, faster strokes |
+| Camera and staging | 15% | 10% | 15% | typed camera keys; still no rotation or 3D |
+| Timing, audio, playback | 15% | 10% | 20% | 23.976–60 fps, rate change keeping timing; still no audio |
+| Script import / export | 15% | 50% | 55% | shot list CSV, shot field |
+| Printing and sharing | 10% | 35% | 45% | shot list; sheet field choice still missing |
+| **Weighted total** | | **≈19%** | **≈28%** | |
+
+Data safety (autosave, crash recovery, full undo, atomic saves) is not a feature dimension of the
+reference but was its users' most serious complaint category; BoardCraft now covers it.
 
 ## By feature area
 
 | Area | Works today | Missing |
 |---|---|---|
-| Scenes, panels | add, delete, reorder, numbers, headings | acts/sequences, shots, renumbering rules, panel duplication |
-| Drawing | raster brush + pressure, eraser, layers, image import | vector, fill, selection/transform, onion skin, stabilizer |
-| Camera | pan/zoom keys, eased, overlay | rotation, multiple keys UI, 3D layer parallax |
-| Timeline | duration retiming, playhead, scene bands | audio tracks, transitions, scrubbing audio |
-| Import | Fountain, Final Draft (`.fdx`), ScriptCraft scene list; re-import by scene id; conform timing from OTIO/EDL/FCP7 XML/FCPXML | PDF scripts, audio |
-| Export | OTIO, CMX 3600 EDL, FCP7 XML, FCPXML (+ stills), PDF board sheets, PNG panels | movie render, camera moves as keyframes, sheet templates |
+| Scenes, panels | add, duplicate, delete, reorder, numbers, headings, shot type | acts/sequences, renumbering rules, panel split |
+| Drawing | pressure brush, eraser, layers, image import, external editor round trip, zoom/pan, straight lines, onion skin | vector strokes, fill, lasso/transform, canvas rotation, stabilizer, rulers |
+| Camera | pan/zoom keys, eased, typed values | rotation, multi-key timeline editor, 3D layers |
+| Timeline | duration retiming, playhead, scene bands, 23.976–60 fps | audio tracks, transitions |
+| Import | Fountain, Final Draft, ScriptCraft scene list; re-import by scene id; conform | PDF scripts, audio |
+| Export | OTIO, EDL, FCP7 XML, FCPXML (+ stills), PDF board sheets, shot list CSV, PNG panels | movie render with burn-ins, sheet templates |
+| Safety | autosave, crash recovery, undo/redo for every edit, atomic saves | version history |
 
 ## What works today (evidence)
+
+- Polish-pass tests: autosave and recovery (unit and kittest), undo of strokes, typing and
+  structural edits by keyboard, Board Settings by keyboard, duplicate/onion/zoom/shot presets.
 
 - Tests: `cargo test --workspace` (format round trip and fuzzing, Fountain parsing, OTIO shape,
   camera interpolation, brush, app UI tests with accessibility checks).

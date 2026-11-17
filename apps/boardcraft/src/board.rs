@@ -21,7 +21,7 @@ fn snippet(s: &str, max: usize) -> String {
 
 pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let mut action = None;
-    let fps = app.project.settings.fps.max(1) as f32;
+    let fps = app.project.settings.fps_f64() as f32;
     let aspect = app.project.settings.height as f32 / app.project.settings.width.max(1) as f32;
     let live = app.stroke.is_none();
     let selected = app.selected;
@@ -117,7 +117,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             let last = app.project.scene(scene).and_then(|s| s.panels.last()).map(|p| p.id);
             if let Ok(id) = app.project.add_panel(scene, last) {
                 app.select_and_seek(id);
-                app.dirty = true;
+                app.edited();
             }
         }
         None => {}

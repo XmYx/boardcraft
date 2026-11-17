@@ -29,17 +29,37 @@ pub struct Id(pub u64);
 pub struct Settings {
     pub width: u32,
     pub height: u32,
-    /// Whole frames per second.
+    /// Frames per second: `fps`, or `fps × 1000/1001` when `ntsc` (23.976, 29.97, 59.94).
     pub fps: u32,
+    #[serde(default)]
+    pub ntsc: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT, fps: DEFAULT_FPS }
+        Self { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT, fps: DEFAULT_FPS, ntsc: false }
     }
 }
 
 impl Settings {
+    /// The exact rate as a fraction (`num / den` frames per second).
+    pub fn rate(&self) -> (u32, u32) {
+        let fps = self.fps.max(1);
+        if self.ntsc { (fps * 1000, 1001) } else { (fps, 1) }
+    }
+
+    /// Frames per second as a float (display, playback, rounding).
+    pub fn fps_f64(&self) -> f64 {
+        let (n, d) = self.rate();
+        n as f64 / d as f64
+    }
+
+    /// `23.976`, `24`, `29.97`.
+    pub fn rate_label(&self) -> String {
+        let f = self.fps_f64();
+        if self.ntsc { format!("{:.3}", f).trim_end_matches('0').trim_end_matches('.').to_string() } else { self.fps.to_string() }
+    }
+
     /// Whether every value is in range.
     pub fn is_valid(&self) -> bool {
         (MIN_SIDE..=MAX_SIDE).contains(&self.width) && (MIN_SIDE..=MAX_SIDE).contains(&self.height) && (1..=MAX_FPS).contains(&self.fps)
@@ -84,6 +104,9 @@ pub struct Panel {
     pub layers: Vec<Layer>,
     #[serde(default)]
     pub camera: Camera,
+    /// Shot type or size (`WS`, `MS`, `CU`, `OTS`, …), free text.
+    #[serde(default)]
+    pub shot: String,
     /// Bumped on every change to the pixels; lets a UI cache textures. Not saved.
     #[serde(skip)]
     pub revision: u64,
@@ -98,6 +121,17 @@ impl Panel {
         let mut out = Raster::filled(settings.width, settings.height, PAPER);
         for layer in self.layers.iter().filter(|l| l.visible && !l.pixels.is_empty()) {
             out.composite_over(&layer.pixels, layer.opacity);
+        }
+        out
+    }
+
+    /// [`Panel::composite`] of the rectangle `x, y, w, h` only (fast updates while drawing).
+    pub fn composite_region(&self, settings: &Settings, x: u32, y: u32, w: u32, h: u32) -> Raster {
+        let x = x.min(settings.width.saturating_sub(1));
+        let y = y.min(settings.height.saturating_sub(1));
+        let mut out = Raster::filled(w.clamp(1, settings.width - x), h.clamp(1, settings.height - y), PAPER);
+        for layer in self.layers.iter().filter(|l| l.visible && !l.pixels.is_empty()) {
+            out.composite_over(&layer.pixels.crop(x, y, w, h), layer.opacity);
         }
         out
     }
@@ -193,6 +227,7 @@ impl Project {
             dialogue: String::new(),
             action: String::new(),
             notes: String::new(),
+            shot: String::new(),
             layers: vec![layer],
             camera: Camera::default(),
             revision: 0,
@@ -338,6 +373,60 @@ impl Project {
         }
     }
 
+    /// A copy of a panel with fresh ids for it and its layers, inserted right after it.
+    pub fn duplicate_panel(&mut self, id: Id) -> crate::Result<Id> {
+        let pos = self.find_panel(id).ok_or_else(|| crate::Error::NotFound(format!("panel {}", id.0)))?;
+        let mut copy = self.panel(id).cloned().ok_or_else(|| crate::Error::NotFound(format!("panel {}", id.0)))?;
+        copy.id = self.alloc();
+        for l in &mut copy.layers {
+            l.id = self.alloc();
+        }
+        let new_id = copy.id;
+        if let Some(scene) = self.scenes.get_mut(pos.scene) {
+            scene.panels.insert(pos.panel + 1, copy);
+        }
+        Ok(new_id)
+    }
+
+    /// Change the canvas size without stretching: every layer keeps its pixels, centred, cropped or
+    /// extended with transparency. Camera keys keep their normalized positions.
+    pub fn set_canvas(&mut self, width: u32, height: u32) -> crate::Result<()> {
+        if !(MIN_SIDE..=MAX_SIDE).contains(&width) || !(MIN_SIDE..=MAX_SIDE).contains(&height) {
+            return Err(crate::Error::Format(format!("canvas {width}×{height} is out of range ({MIN_SIDE}–{MAX_SIDE})")));
+        }
+        for p in self.scenes.iter_mut().flat_map(|s| s.panels.iter_mut()) {
+            for l in &mut p.layers {
+                l.pixels = l.pixels.recanvas(width, height);
+            }
+            p.touch();
+        }
+        self.settings.width = width;
+        self.settings.height = height;
+        Ok(())
+    }
+
+    /// Change the frame rate. With `keep_time`, durations and camera keys are rescaled so every
+    /// panel lasts as long in seconds as before.
+    pub fn set_rate(&mut self, fps: u32, ntsc: bool, keep_time: bool) -> crate::Result<()> {
+        if !(1..=MAX_FPS).contains(&fps) {
+            return Err(crate::Error::Format(format!("{fps} fps is out of range (1–{MAX_FPS})")));
+        }
+        let old = self.settings.fps_f64();
+        self.settings.fps = fps;
+        self.settings.ntsc = ntsc;
+        let k = self.settings.fps_f64() / old.max(1e-6);
+        if keep_time {
+            for p in self.scenes.iter_mut().flat_map(|s| s.panels.iter_mut()) {
+                p.duration = ((p.duration as f64 * k).round() as u32).clamp(1, MAX_PANEL_FRAMES);
+                for key in &mut p.camera.keys {
+                    key.frame = (key.frame as f64 * k).round() as u32;
+                }
+                p.camera.normalize();
+            }
+        }
+        Ok(())
+    }
+
     /// Repair a loaded project: unique ids, `next_id` past every id, durations ≥ 1, sorted
     /// camera keys, layer pixels at the canvas size.
     pub fn repair(&mut self) {
@@ -442,6 +531,20 @@ mod tests {
         assert_eq!(p.scenes[0].panels[0].layers[0].opacity, 1.0);
         let fresh = p.alloc();
         assert!(p.panels().all(|(_, x)| x.id != fresh));
+    }
+
+    #[test]
+    fn region_matches_full_composite() {
+        let (mut p, ids) = three_panels();
+        p.settings.width = 64;
+        p.settings.height = 36;
+        p.repair();
+        let panel = p.panel_mut(ids[0]).unwrap();
+        panel.layers[0].pixels.polyline(&[(3.0, 3.0), (60.0, 30.0)], &crate::raster::Brush::default());
+        let s = p.settings;
+        let full = p.panel(ids[0]).unwrap().composite(&s);
+        let part = p.panel(ids[0]).unwrap().composite_region(&s, 10, 5, 20, 12);
+        assert_eq!(part, full.crop(10, 5, 20, 12));
     }
 
     #[test]

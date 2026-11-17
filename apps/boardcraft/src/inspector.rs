@@ -4,12 +4,27 @@ use boardcraft_core::Id;
 
 use crate::app::BoardApp;
 
+/// Common shot sizes and angles (generic film terms).
+const SHOTS: [(&str, &str); 10] = [
+    ("EWS", "Extreme wide shot"),
+    ("WS", "Wide shot"),
+    ("FS", "Full shot"),
+    ("MS", "Medium shot"),
+    ("MCU", "Medium close-up"),
+    ("CU", "Close-up"),
+    ("ECU", "Extreme close-up"),
+    ("OTS", "Over the shoulder"),
+    ("POV", "Point of view"),
+    ("INS", "Insert"),
+];
+
 enum LayerAction {
     Add,
     Delete(Id),
     Up(Id),
     Down(Id),
     Clear(Id),
+    External(Id),
 }
 
 fn text_field(ui: &mut egui::Ui, label: &str, value: &mut String, rows: usize) -> bool {
@@ -23,7 +38,8 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         return;
     };
     let label = app.project.panel_label(id);
-    let fps = app.project.settings.fps.max(1);
+    let fps = app.project.settings.fps_f64() as f32;
+    let fps_label = app.project.settings.rate_label();
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         ui.heading(tlf!("Panel {label}", label = label));
         let mut changed = false;
@@ -47,7 +63,19 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                     .add(egui::DragValue::new(&mut panel.duration).range(1..=boardcraft_core::model::MAX_PANEL_FRAMES).suffix(" fr"))
                     .labelled_by(l.id)
                     .changed();
-                ui.label(tlf!("= {seconds} s at {fps} fps", seconds = format!("{:.2}", panel.duration as f32 / fps as f32), fps = fps));
+                ui.label(tlf!("= {seconds} s at {fps} fps", seconds = format!("{:.2}", panel.duration as f32 / fps), fps = fps_label));
+            });
+            ui.horizontal(|ui| {
+                let l = ui.label(tl!("Shot"));
+                changed |= ui.add(egui::TextEdit::singleline(&mut panel.shot).desired_width(90.0).hint_text("WS, MS, CU…")).labelled_by(l.id).changed();
+                ui.menu_button(tl!("Shot presets"), |ui| {
+                    for (code, name) in SHOTS {
+                        if ui.button(format!("{code}  {}", tl!(name))).clicked() {
+                            panel.shot = code.to_string();
+                            changed = true;
+                        }
+                    }
+                });
             });
             changed |= text_field(ui, tl!("Dialogue"), &mut panel.dialogue, 2);
             changed |= text_field(ui, tl!("Action"), &mut panel.action, 3);
@@ -77,6 +105,13 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                         }
                         if ui.button(tl!("Move Down")).clicked() {
                             layer_action = Some(LayerAction::Down(layer.id));
+                        }
+                        if ui
+                            .button(tl!("Edit in Image Editor…"))
+                            .on_hover_text(tl!("Open this layer in your image editor; BoardCraft reloads it when you save there"))
+                            .clicked()
+                        {
+                            layer_action = Some(LayerAction::External(layer.id));
                         }
                         if ui.button(tl!("Clear")).clicked() {
                             layer_action = Some(LayerAction::Clear(layer.id));
@@ -146,7 +181,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         }
         app.active_layer = active;
         if changed {
-            app.dirty = true;
+            app.edited();
         }
         if let Some(a) = layer_action {
             apply_layer_action(app, id, a);
@@ -171,6 +206,9 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             if ui.button(tl!("Move Later")).clicked() {
                 app.move_panel(true);
             }
+            if ui.button(tl!("Duplicate Panel")).clicked() {
+                app.duplicate_panel();
+            }
             if ui.button(tl!("Delete Panel")).clicked() {
                 app.delete_panel();
             }
@@ -188,8 +226,11 @@ fn apply_layer_action(app: &mut BoardApp, panel_id: Id, action: LayerAction) {
             }
             app.active_layer = Some(lid);
         }
+        LayerAction::External(lid) => {
+            crate::external::start(app, panel_id, lid);
+            return;
+        }
         LayerAction::Clear(lid) => {
-            app.push_undo(panel_id, lid);
             let (w, h) = (app.project.settings.width, app.project.settings.height);
             if let Some(l) = app.project.panel_mut(panel_id).and_then(|p| p.layer_mut(lid)) {
                 l.pixels = boardcraft_core::Raster::new(w, h);
@@ -203,8 +244,6 @@ fn apply_layer_action(app: &mut BoardApp, panel_id: Id, action: LayerAction) {
                     app.status = tl!("A panel keeps at least one layer").into();
                 }
             }
-            app.undo.retain(|u| u.layer != lid);
-            app.redo.retain(|u| u.layer != lid);
             if app.active_layer == Some(lid) {
                 app.active_layer = app.project.panel(panel_id).and_then(|p| p.layers.last()).map(|l| l.id);
             }
@@ -224,5 +263,5 @@ fn apply_layer_action(app: &mut BoardApp, panel_id: Id, action: LayerAction) {
     if let Some(p) = app.project.panel_mut(panel_id) {
         p.touch();
     }
-    app.dirty = true;
+    app.edited();
 }

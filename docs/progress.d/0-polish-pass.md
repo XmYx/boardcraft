@@ -1,0 +1,1 @@
+| 2026-11-17 | Polish pass: autosave and crash recovery, undo for every edit (copy-on-write pixels), Board Settings (aspect ratio, size, 23.976–60 fps), duplicate panel, shot field, shot list CSV, onion skin, canvas zoom/pan, straight lines, Edit in Image Editor, faster strokes; user research and parity re-measure |
