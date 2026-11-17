@@ -309,54 +309,69 @@ pub fn estimate_seconds(beat: &Beat) -> f32 {
     s.clamp(1.5, 8.0)
 }
 
-/// Append the script's scenes to `project`: one panel per action paragraph or dialogue block.
-/// Transitions become notes on the panel before them. A scene with no beats gets one empty panel.
-/// Returns how many scenes and panels were added.
-pub fn append_to_project(project: &mut Project, script: &Script) -> (usize, usize) {
+/// The panels one script scene boards to: one per action paragraph or dialogue block, with a
+/// duration estimated from the text. Transitions become notes on the panel before them. A scene
+/// with no beats gets one empty panel. Ids come from `project`.
+pub fn scene_panels(project: &mut Project, scene: &ScriptScene) -> Vec<crate::model::Panel> {
     let fps = project.settings.fps.max(1) as f32;
-    let mut panels = 0;
+    let mut panels: Vec<crate::model::Panel> = Vec::new();
+    for beat in &scene.beats {
+        if let Beat::Transition(t) = beat
+            && let Some(prev) = panels.last_mut()
+        {
+            if !prev.notes.is_empty() {
+                prev.notes.push('\n');
+            }
+            prev.notes.push_str(t);
+            continue;
+        }
+        let mut panel = project.new_panel();
+        panel.duration = (estimate_seconds(beat) * fps).round().max(1.0) as u32;
+        match beat {
+            Beat::Action(t) => panel.action = t.clone(),
+            Beat::Dialogue { character, parenthetical, text } => {
+                panel.dialogue = match parenthetical {
+                    Some(p) => format!("{character} ({p}): {text}"),
+                    None => format!("{character}: {text}"),
+                }
+            }
+            Beat::Transition(t) => panel.notes = t.clone(),
+        }
+        panels.push(panel);
+    }
+    if panels.is_empty() {
+        panels.push(project.new_panel());
+    }
+    panels
+}
+
+/// How many panels [`scene_panels`] makes for `scene`.
+pub fn scene_panel_count(scene: &ScriptScene) -> usize {
+    let mut n = 0;
+    for b in &scene.beats {
+        if !matches!(b, Beat::Transition(_)) || n == 0 {
+            n += 1;
+        }
+    }
+    n.max(1)
+}
+
+/// Append the script's scenes to `project`. Returns how many scenes and panels were added.
+pub fn append_to_project(project: &mut Project, script: &Script) -> (usize, usize) {
+    let mut count = 0;
     for s in &script.scenes {
+        let panels = scene_panels(project, s);
+        count += panels.len();
         let scene_id = project.add_scene(&s.heading);
-        let mut created = Vec::new();
-        for beat in &s.beats {
-            if let Beat::Transition(t) = beat
-                && let Some(prev) = created.last().and_then(|&id| project.panel_mut(id))
-            {
-                if !prev.notes.is_empty() {
-                    prev.notes.push('\n');
-                }
-                prev.notes.push_str(t);
-                continue;
-            }
-            let mut panel = project.new_panel();
-            panel.duration = (estimate_seconds(beat) * fps).round().max(1.0) as u32;
-            match beat {
-                Beat::Action(t) => panel.action = t.clone(),
-                Beat::Dialogue { character, parenthetical, text } => {
-                    panel.dialogue = match parenthetical {
-                        Some(p) => format!("{character} ({p}): {text}"),
-                        None => format!("{character}: {text}"),
-                    }
-                }
-                Beat::Transition(t) => panel.notes = t.clone(),
-            }
-            created.push(panel.id);
-            if let Some(sc) = project.scene_mut(scene_id) {
-                sc.panels.push(panel);
-            }
-        }
-        if created.is_empty() && project.add_panel(scene_id, None).is_ok() {
-            panels += 1;
-        }
-        panels += created.len();
         if let Some(sc) = project.scene_mut(scene_id) {
+            sc.panels = panels;
             if let Some(n) = &s.number {
                 sc.number = n.clone();
             }
             sc.source_scene_id = s.scene_id.clone().unwrap_or_default();
         }
     }
-    (script.scenes.len(), panels)
+    (script.scenes.len(), count)
 }
 
 /// A new board from a screenplay.

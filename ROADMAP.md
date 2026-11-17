@@ -14,7 +14,7 @@
 | Measure | Today |
 |---|---|
 | Overall parity with the target (estimate) | ~5% |
-| Pipeline hand-offs | Fountain in, OTIO (FilmCraft) out, PNG panels out |
+| Pipeline hand-offs | Fountain / FDX / scene-list JSON in (with re-import), OTIO / EDL / FCP7 XML / FCPXML out and conform back, PNG panels |
 | Tests | run `cargo xtask ci`: core, CLI, app UI (kittest, accessibility checks), xtask |
 
 ## By dimension
@@ -26,7 +26,7 @@
 | Camera | pan/zoom keys per panel, eased, typed key values | rotation, timeline key editor, layer parallax |
 | Timing | per-panel duration, timeline edge retiming | audio track (dialogue, scratch), transitions |
 | Playback | panel durations through camera moves, captions | audio, loop range |
-| Interchange | Fountain import, OTIO export, PNG stills | camera moves as FilmCraft Motion keyframes, PDF board sheets, re-import by scene id |
+| Interchange | Fountain, Final Draft and ScriptCraft JSON import; re-import by scene id; OTIO, EDL, FCP7 XML, FCPXML export; conform timing; PNG stills | camera moves as FilmCraft Motion keyframes, PDF board sheets |
 | Agents | every edit a command; `boardcraft-cli` (new, info, exec, export) | MCP server / control channel |
 | Accessibility | named nodes, keyboard flows, live status, typed alternatives to drags | canvas content nodes per layer, high-contrast theme |
 | Languages | English; craft-i18n wiring ready | translations in craft-i18n |

@@ -9,10 +9,13 @@
 //! - [`camera`]: camera keyframes and the eased pan/zoom between them.
 //! - [`fountain`]: Fountain screenplay import (scene headings, action, dialogue), the hand-off from
 //!   ScriptCraft.
+//! - [`script`]: screenplays in Fountain, Final Draft (`.fdx`) and ScriptCraft's scene list (JSON),
+//!   and re-import by stable scene id.
 //! - [`format`]: the open `.boardcraft` project file (a zip of `project.json` + one PNG per layer).
-//! - [`otio`]: animatic timeline export to OpenTimelineIO, which FilmCraft imports, plus rendered
-//!   panel stills.
+//! - [`stills`]: rendered panel stills (the camera's first frame of every panel).
 //! - [`command`]: every edit as a serializable command (app, CLI and tests share them).
+//! - [`timeline`]: the animatic as an editorial timeline (OTIO, CMX 3600 EDL, FCP7 XML, FCPXML) through
+//!   craft-timeline, and conform (timing back from an edit).
 //! - [`ai`]: a stubbed hook for generating panel drawings through the shared Craft AI layer.
 //! - [`demo`]: a small procedurally drawn demo board.
 //!
@@ -28,8 +31,10 @@ pub mod error;
 pub mod format;
 pub mod fountain;
 pub mod model;
-pub mod otio;
 pub mod raster;
+pub mod script;
+pub mod stills;
+pub mod timeline;
 
 pub use camera::{Camera, CameraKey, ViewRect};
 pub use error::{Error, Result};

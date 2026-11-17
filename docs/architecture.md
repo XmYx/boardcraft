@@ -4,7 +4,7 @@
 
 | Crate | Path | What | Depends on UI? |
 |---|---|---|---|
-| `boardcraft-core` | `crates/core` | document model, brush, camera, `.boardcraft` format, Fountain import, OTIO/PNG export, AI hook, demo board | no (`cargo xtask layers`) |
+| `boardcraft-core` | `crates/core` | document model, brush, camera, `.boardcraft` format, screenplay import and re-import (`script`, `fountain`), timeline export and conform (`timeline`), stills, AI hook, demo board | no (`cargo xtask layers`) |
 | `boardcraft` | `apps/boardcraft` | the egui desktop app | yes (egui/eframe 0.37, rfd) |
 | `boardcraft-cli` | `apps/boardcraft-cli` | headless commands, info, export | no |
 | `xtask` | `xtask` | `cargo xtask ci`, `layers`, `assets`, `licenses`, `progress`, `version`, `strings` | no |
@@ -12,13 +12,15 @@
 Shared libraries from [storytold/craft-libs](https://github.com/storytold/craft-libs), pinned by
 commit in the root `Cargo.toml`: `craft-zip` (container), `craft-image-codecs` (PNG/JPEG/…
 decode, PNG encode), `craft-atomic` (crash-safe saves), `craft-i18n` (interface language),
-`craft-fonts-build` (optional craft-fonts faces), `craft-ai-core` (AI role declaration).
+`craft-fonts-build` (optional craft-fonts faces), `craft-timeline` (OTIO, EDL, FCP7 XML and FCPXML
+read and write through one neutral model), `craft-xml` (Final Draft), `craft-ai-core` (AI role
+declaration).
 
 ### craft-libs API gaps (not filled by copying code)
 
 - No raster paint canvas or brush crate: `boardcraft-core::raster` is local and a candidate to move.
-- No OpenTimelineIO writer: `boardcraft-core::otio` writes the subset FilmCraft reads; a shared
-  `craft-otio` (or OTIO in `craft-timeline`) would serve FilmCraft and BoardCraft.
+- No Final Draft (`.fdx`) reader: `boardcraft-core::script::parse_fdx` is local (on craft-xml);
+  ScriptCraft will need the same, so it is a candidate for craft-libs.
 - No Fountain parser: `boardcraft-core::fountain` should move to craft-libs once ScriptCraft needs
   the same parser.
 - No progress-log joiner yet (RFC-0017): `cargo xtask progress` is a minimal local joiner until the

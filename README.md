@@ -45,11 +45,15 @@ time the panels and play the animatic, then send the cut to FilmCraft.
   a timeline strip with scene bands, thumbnails and a playhead.
 - **Animatic playback.** Plays the panels for their durations at the project rate through each
   panel's camera move, with the dialogue as a caption.
-- **Screenplay import.** Fountain (`.fountain`) scene headings, action and dialogue become scenes and
-  panels with text and an estimated duration.
-- **Animatic export for FilmCraft.** OpenTimelineIO (`.otio`) timeline of rendered panel stills,
-  with scene markers and the panel text in clip metadata. Verified with FilmCraft's own OTIO
-  importer.
+- **Screenplay import.** Fountain, Final Draft (`.fdx`) and ScriptCraft's scene list (JSON) become
+  scenes and panels with text and an estimated duration.
+- **Re-import by scene id.** Importing a revised script updates the board in place: scenes matched
+  by their stable id keep their drawings, cameras and timing and take the new text; new scenes are
+  added, removed ones kept and reported.
+- **Timeline export.** The animatic as OpenTimelineIO, CMX 3600 EDL, Final Cut Pro 7 XML or FCPXML,
+  with rendered panel stills and scene markers (through craft-timeline). All four verified with
+  FilmCraft's own importers.
+- **Conform.** Read an editor's cut back (any of the four) and take its panel timing.
 - **Panel images.** Export every panel as a PNG.
 - **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer,
   documented in [docs/file-format.md](docs/file-format.md). Saves are atomic.
@@ -109,10 +113,11 @@ cargo xtask ci     # fmt, clippy -D warnings, tests, layering, assets, licences,
 
 ## Pipeline
 
-- **In: ScriptCraft.** File ▸ Import Screenplay (Fountain) reads scene headings, action and
-  dialogue. A `[[scene-id: …]]` note after a heading is kept as the scene's stable id.
-- **Out: FilmCraft.** File ▸ Export Animatic Timeline (OTIO) writes `<name>.otio` and
-  `<name>_stills/`; open the `.otio` in FilmCraft with File ▸ Import.
+- **In: ScriptCraft (or any screenwriting app).** File ▸ Import Screenplay reads Fountain, Final
+  Draft or ScriptCraft's scene list; on a board with work it updates scenes by their stable id.
+- **Out: FilmCraft (or any editor).** File ▸ Export Animatic Timeline ▸ OTIO / EDL / FCP7 XML /
+  FCPXML writes the timeline and `<name>_stills/`. File ▸ Conform Timing from Edit brings the
+  editor's timing back.
 
 Details: [docs/interop.md](docs/interop.md).
 

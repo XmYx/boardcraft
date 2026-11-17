@@ -1,10 +1,12 @@
 //! `boardcraft-cli`: BoardCraft without a window, for scripts and agents.
 //!
 //! ```text
-//! boardcraft-cli new <out.boardcraft> [--from <script.fountain>] [--demo]
+//! boardcraft-cli new <out.boardcraft> [--from <script>] [--demo]
 //! boardcraft-cli info <board.boardcraft>                 # JSON summary
 //! boardcraft-cli exec <board.boardcraft> <command-json>... # apply commands, save in place
-//! boardcraft-cli export-otio <board.boardcraft> <out.otio>
+//! boardcraft-cli import-script <board.boardcraft> <script> [--append]
+//! boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
+//! boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
 //! boardcraft-cli export-png <board.boardcraft> <dir>
 //! boardcraft-cli commands                                # list command names
 //! ```
@@ -17,14 +19,16 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use boardcraft_core::{command, demo, format, fountain, otio};
+use boardcraft_core::{command, demo, format, fountain, stills, timeline};
 use serde_json::json;
 
 const USAGE: &str = "usage:
-  boardcraft-cli new <out.boardcraft> [--from <script.fountain>] [--demo]
+  boardcraft-cli new <out.boardcraft> [--from <script.fountain|.fdx|.scenes.json>] [--demo]
   boardcraft-cli info <board.boardcraft>
   boardcraft-cli exec <board.boardcraft> <command-json>...
-  boardcraft-cli export-otio <board.boardcraft> <out.otio>
+  boardcraft-cli import-script <board.boardcraft> <script> [--append]
+  boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
+  boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
   boardcraft-cli export-png <board.boardcraft> <dir>
   boardcraft-cli commands
   boardcraft-cli --version";
@@ -45,6 +49,8 @@ const COMMANDS: &[&str] = &[
     "set_layer_visible",
     "set_layer_opacity",
     "import_fountain",
+    "import_script",
+    "conform",
 ];
 
 enum Fail {
@@ -92,8 +98,9 @@ fn run(args: &[String]) -> Result<String, Fail> {
                     "--demo" => project = demo::demo_project(),
                     "--from" => {
                         let path = arg(i + 1)?;
-                        let text = std::fs::read(path).map_err(|e| Fail::Op(format!("{path}: {e}")))?;
-                        project = fountain::project_from_script(&fountain::parse(&String::from_utf8_lossy(&text)), Default::default());
+                        let bytes = std::fs::read(path).map_err(|e| Fail::Op(format!("{path}: {e}")))?;
+                        let script = boardcraft_core::script::parse_script(path, &bytes).map_err(op)?;
+                        project = fountain::project_from_script(&script, Default::default());
                         i += 1;
                     }
                     other => return Err(Fail::Usage(format!("unknown option {other}\n{USAGE}"))),
@@ -119,14 +126,34 @@ fn run(args: &[String]) -> Result<String, Fail> {
             format::save(&project, path).map_err(op)?;
             serde_json::to_string_pretty(&outcomes).map_err(op)
         }
-        "export-otio" => {
+        "export" | "export-otio" => {
             let project = format::load(Path::new(arg(1)?)).map_err(op)?;
-            let stills = otio::export_animatic(&project, Path::new(arg(2)?)).map_err(op)?;
+            let stills = timeline::export(&project, Path::new(arg(2)?)).map_err(op)?;
             Ok(format!("wrote {} and stills in {}", arg(2)?, stills.display()))
+        }
+        "import-script" => {
+            let board = Path::new(arg(1)?);
+            let path = arg(2)?;
+            let merge = !args.iter().skip(3).any(|a| a == "--append");
+            let bytes = std::fs::read(path).map_err(|e| Fail::Op(format!("{path}: {e}")))?;
+            let mut project = format::load(board).map_err(op)?;
+            let cmd = command::Command::ImportScript { name: path.to_string(), text: String::from_utf8_lossy(&bytes).into_owned(), format: None, merge };
+            let out = command::apply(&mut project, &cmd).map_err(op)?;
+            format::save(&project, board).map_err(op)?;
+            Ok(out.message)
+        }
+        "conform" => {
+            let board = Path::new(arg(1)?);
+            let path = arg(2)?;
+            let bytes = std::fs::read(path).map_err(|e| Fail::Op(format!("{path}: {e}")))?;
+            let mut project = format::load(board).map_err(op)?;
+            let r = timeline::conform(&mut project, Path::new(path), &bytes).map_err(op)?;
+            format::save(&project, board).map_err(op)?;
+            serde_json::to_string_pretty(&r).map_err(op)
         }
         "export-png" => {
             let project = format::load(Path::new(arg(1)?)).map_err(op)?;
-            let files = otio::write_stills(&project, Path::new(arg(2)?)).map_err(op)?;
+            let files = stills::write_stills(&project, Path::new(arg(2)?)).map_err(op)?;
             Ok(format!("wrote {} panel images", files.len()))
         }
         other => Err(Fail::Usage(format!("unknown command {other}\n{USAGE}"))),
@@ -174,7 +201,16 @@ mod tests {
         assert!(run(&s(&["exec", b, &cmd])).is_ok());
         assert_eq!(format::load(&board).unwrap().panels().next().unwrap().1.duration, 30);
         assert!(matches!(run(&s(&["exec", b, r#"{"cmd":"nope"}"#])), Err(Fail::Op(_))));
-        assert!(run(&s(&["export-otio", b, dir.join("a.otio").to_str().unwrap()])).is_ok());
+        for ext in ["otio", "edl", "xml", "fcpxml"] {
+            let out = dir.join(format!("a.{ext}"));
+            assert!(run(&s(&["export", b, out.to_str().unwrap()])).is_ok(), "{ext}");
+            assert!(run(&s(&["conform", b, out.to_str().unwrap()])).is_ok(), "{ext}");
+        }
+        std::fs::write(&script, "INT. A\n\nRain, harder.\n\nBOB\nHi.\n").unwrap();
+        assert!(run(&s(&["import-script", b, sc])).is_ok());
+        let p = format::load(&board).unwrap();
+        assert_eq!(p.scenes.len(), 1, "merged by heading");
+        assert_eq!(p.scenes[0].panels[0].action, "Rain, harder.");
         assert!(matches!(run(&s(&["bogus"])), Err(Fail::Usage(_))));
         assert!(matches!(run(&s(&[])), Err(Fail::Usage(_))));
         std::fs::remove_dir_all(&dir).ok();

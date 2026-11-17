@@ -5,7 +5,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use boardcraft_core::command::{self, Command};
-use boardcraft_core::{Brush, Id, Project, Raster, Tool, format, fountain, otio};
+use boardcraft_core::timeline::TimelineFormat;
+use boardcraft_core::{Brush, Id, Project, Raster, Tool, format, fountain, script, stills, timeline};
+
+/// Screenplay files BoardCraft reads.
+const SCRIPT_EXTENSIONS: &[&str] = &["fountain", "spmd", "txt", "fdx", "json"];
 
 use crate::args::{Cli, StartView};
 use crate::textures::Textures;
@@ -186,11 +190,10 @@ impl BoardApp {
     // ---------------------------------------------------------------------------------------
 
     pub fn open_path(&mut self, path: &Path) {
-        let is_script = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("fountain") || e.eq_ignore_ascii_case("spmd") || e.eq_ignore_ascii_case("txt"));
+        let is_script = path.extension().is_some_and(|e| SCRIPT_EXTENSIONS.iter().any(|x| e.eq_ignore_ascii_case(x)));
         if is_script {
-            match std::fs::read(path) {
-                Ok(bytes) => {
-                    let script = fountain::parse(&String::from_utf8_lossy(&bytes));
+            match std::fs::read(path).map_err(|e| e.to_string()).and_then(|b| script::parse_script(&path.to_string_lossy(), &b).map_err(|e| e.to_string())) {
+                Ok(script) => {
                     let project = fountain::project_from_script(&script, Default::default());
                     let n = project.panel_count();
                     self.replace_project(project, None);
@@ -215,8 +218,7 @@ impl BoardApp {
     }
 
     pub fn open_dialog(&mut self) {
-        if let Some(p) =
-            Self::dialog().add_filter(tl!("BoardCraft project"), &[format::EXTENSION]).add_filter(tl!("Fountain screenplay"), &["fountain"]).pick_file()
+        if let Some(p) = Self::dialog().add_filter(tl!("BoardCraft project"), &[format::EXTENSION]).add_filter(tl!("Screenplay"), SCRIPT_EXTENSIONS).pick_file()
         {
             self.open_path(&p);
         }
@@ -257,22 +259,48 @@ impl BoardApp {
         }
     }
 
-    pub fn import_fountain(&mut self) {
-        let Some(path) = Self::dialog().add_filter(tl!("Fountain screenplay"), &["fountain", "spmd", "txt"]).pick_file() else { return };
-        match std::fs::read(&path) {
-            Ok(bytes) => {
-                let script = fountain::parse(&String::from_utf8_lossy(&bytes));
-                // Into an untouched blank board: replace it; otherwise append the scenes.
-                let untouched = !self.dirty && self.path.is_none() && self.project.panel_count() <= 1;
-                if untouched {
-                    let p = fountain::project_from_script(&script, self.project.settings);
+    /// Import a screenplay (Fountain, Final Draft, ScriptCraft scene list). Into an untouched blank
+    /// board it starts the board; otherwise it updates the board by stable scene id, keeping every
+    /// drawing (see `boardcraft_core::script::reimport`).
+    pub fn import_script(&mut self) {
+        let Some(path) = Self::dialog().add_filter(tl!("Screenplay"), SCRIPT_EXTENSIONS).pick_file() else { return };
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(e) => {
+                self.status = tlf!("Could not read {file}: {error}", file = path.display(), error = e);
+                return;
+            }
+        };
+        let untouched = !self.dirty && self.path.is_none() && self.project.panel_count() <= 1;
+        if untouched {
+            match script::parse_script(&path.to_string_lossy(), &bytes) {
+                Ok(s) => {
+                    let p = fountain::project_from_script(&s, self.project.settings);
                     self.replace_project(p, None);
                     self.dirty = true;
-                    self.status = tlf!("Boarded {scenes} scenes from {file}", scenes = script.scenes.len(), file = path.display());
-                } else {
-                    let (s, n) = fountain::append_to_project(&mut self.project, &script);
-                    self.dirty = true;
-                    self.status = tlf!("Added {scenes} scenes, {n} panels from {file}", scenes = s, n = n, file = path.display());
+                    self.status = tlf!("Boarded {scenes} scenes from {file}", scenes = s.scenes.len(), file = path.display());
+                }
+                Err(e) => self.status = tlf!("Could not import {file}: {error}", file = path.display(), error = e),
+            }
+            return;
+        }
+        let cmd =
+            Command::ImportScript { name: path.to_string_lossy().into_owned(), text: String::from_utf8_lossy(&bytes).into_owned(), format: None, merge: true };
+        if let Some(out) = self.run(cmd) {
+            self.status = tlf!("Updated the board from {file}: {summary}", file = path.display(), summary = out.message);
+            let keep = self.selected.filter(|id| self.project.panel(*id).is_some());
+            self.select(keep.or_else(|| self.project.panels().next().map(|(_, p)| p.id)));
+        }
+    }
+
+    /// Take panel timing from an editor's cut of an exported timeline.
+    pub fn conform(&mut self) {
+        let Some(path) = Self::dialog().add_filter(tl!("Timeline"), &["otio", "edl", "xml", "fcpxml"]).pick_file() else { return };
+        match std::fs::read(&path) {
+            Ok(bytes) => {
+                let cmd = Command::Conform { name: path.to_string_lossy().into_owned(), text: String::from_utf8_lossy(&bytes).into_owned() };
+                if let Some(out) = self.run(cmd) {
+                    self.status = tlf!("Conformed timing from {file}: {summary}", file = path.display(), summary = out.message);
                 }
             }
             Err(e) => self.status = tlf!("Could not read {file}: {error}", file = path.display(), error = e),
@@ -305,11 +333,16 @@ impl BoardApp {
         }
     }
 
-    pub fn export_animatic(&mut self) {
-        let Some(path) = Self::dialog().add_filter(tl!("OpenTimelineIO"), &["otio"]).set_file_name(format!("{}.otio", self.project.name)).save_file() else {
+    /// Export the animatic as an editorial timeline plus panel stills.
+    pub fn export_timeline(&mut self, format: TimelineFormat) {
+        let ext = format.extension();
+        let Some(mut path) = Self::dialog().add_filter(format.label(), &[ext]).set_file_name(format!("{}.{ext}", self.project.name)).save_file() else {
             return;
         };
-        match otio::export_animatic(&self.project, &path) {
+        if path.extension().is_none() {
+            path.set_extension(ext);
+        }
+        match timeline::export(&self.project, &path) {
             Ok(stills) => {
                 self.status = tlf!("Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.", file = path.display(), dir = stills.display())
             }
@@ -319,7 +352,7 @@ impl BoardApp {
 
     pub fn export_pngs(&mut self) {
         let Some(dir) = Self::dialog().pick_folder() else { return };
-        match otio::write_stills(&self.project, &dir) {
+        match stills::write_stills(&self.project, &dir) {
             Ok(files) => self.status = tlf!("Wrote {n} panel images to {dir}", n = files.len(), dir = dir.display()),
             Err(e) => self.status = tlf!("Export failed: {error}", error = e),
         }
@@ -593,15 +626,30 @@ impl BoardApp {
                     self.save_as();
                 }
                 ui.separator();
-                if ui.button(tl!("Import Screenplay (Fountain)…")).clicked() {
-                    self.import_fountain();
+                if ui
+                    .button(tl!("Import Screenplay…"))
+                    .on_hover_text(tl!("Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings."))
+                    .clicked()
+                {
+                    self.import_script();
                 }
                 if ui.button(tl!("Import Image to Panel…")).clicked() {
                     self.import_image();
                 }
                 ui.separator();
-                if ui.button(tl!("Export Animatic Timeline (OTIO)…")).clicked() {
-                    self.export_animatic();
+                ui.menu_button(tl!("Export Animatic Timeline"), |ui| {
+                    for f in TimelineFormat::ALL {
+                        if ui.button(tlf!("{format}…", format = f.label())).clicked() {
+                            self.export_timeline(f);
+                        }
+                    }
+                });
+                if ui
+                    .button(tl!("Conform Timing from Edit…"))
+                    .on_hover_text(tl!("Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)"))
+                    .clicked()
+                {
+                    self.conform();
                 }
                 if ui.button(tl!("Export Panel Images (PNG)…")).clicked() {
                     self.export_pngs();

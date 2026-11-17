@@ -11,8 +11,9 @@ company's product or feature names appear as labels.
 | Animatic | playback of the panels for their durations through their camera moves |
 | Camera tool, camera keys | pan/zoom keyframes of a panel |
 | Brush, Eraser | raster drawing tools |
-| Import Screenplay (Fountain) | board a screenplay |
-| Export Animatic Timeline (OTIO) | timeline + stills for an editor |
+| Import Screenplay | board a screenplay, or update the board from it by scene id |
+| Export Animatic Timeline ▸ *format* | timeline + stills for an editor (formats named by their specifications) |
+| Conform Timing from Edit | take panel durations from an editor's cut |
 | Export Panel Images (PNG) | one image per panel |
 | AI panel sketch | generate a sketch with the shared Craft AI tools (stub) |
 | Key at start / Key at end | add a camera key on the panel's first / last frame |
@@ -24,4 +25,6 @@ Checked 2026-11-17 against craft-contrib `standards/naming.md`: every label abov
 description (storyboard, panel, animatic, camera, brush, timeline are common nouns of the craft),
 none is another company's product or feature name, and AI features are labelled "AI …" with no
 vendor or model name. The reference app is named only in `docs/target-app-parity.md`. File formats
-are named by their open specifications (Fountain, OpenTimelineIO, PNG).
+are named as formats, which naming.md rule 3 keeps accurate: Fountain, OpenTimelineIO, CMX 3600 EDL,
+Final Cut Pro 7 XML, FCPXML, Final Draft (`.fdx`), PNG; these appear as format names in menus and
+dialogs, never as the name of a BoardCraft feature.

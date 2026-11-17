@@ -1,6 +1,15 @@
-# Interop: ScriptCraft in, FilmCraft out
+# Interop: screenplays in, timelines out
 
-BoardCraft sits between **ScriptCraft** (screenplay) and **FilmCraft** (edit).
+BoardCraft sits between **ScriptCraft** (screenplay) and **FilmCraft** (edit), and speaks the
+industry's interchange formats on both sides:
+
+| Direction | Formats |
+|---|---|
+| Screenplay in | Fountain (`.fountain`), Final Draft (`.fdx`), ScriptCraft scene list (`.scenes.json`) |
+| Re-import | any of the above, merged into the board by stable scene id |
+| Timeline out | OpenTimelineIO (`.otio`), CMX 3600 EDL (`.edl`), Final Cut Pro 7 XML (`.xml`), FCPXML 1.10 (`.fcpxml`), each with panel stills |
+| Timeline in (conform) | the same four: panel timing back from an editor's cut |
+| Images out | one PNG per panel |
 
 ## In: screenplays (Fountain)
 
@@ -23,35 +32,75 @@ from fountain.io); BoardCraft reads it as follows:
 Panel durations are estimated from the text (about 2.5 spoken words a second, 1.5–8 s). Importing
 into a board that already has work appends the scenes.
 
-ScriptCraft's *Script ▸ Add Stable Scene IDs* writes the `[[scene-id: <16 hex>]]` notes; boards keep
-the id per scene so a later re-import can update scenes in place (re-import matching itself is a
-gap, see [gaps.md](gaps.md)). ScriptCraft's optional JSON scene list (`scriptcraft-cli scenes`,
-format `scriptcraft-scenes` v1) carries the same scenes and beats; BoardCraft does not read it yet,
-since Fountain carries everything it uses.
+### Other screenplay formats
+
+- **Final Draft `.fdx`** (XML, read with craft-xml): `Scene Heading` paragraphs (their `Number`
+  attribute is the scene number), `Action`, `Shot` and `General` as action panels,
+  `Character` + `Parenthetical` + `Dialogue` as dialogue panels, `Transition` as notes; the first
+  title-page paragraph is the title. Text runs with styles are joined.
+- **ScriptCraft scene list** (`scriptcraft-scenes` version 1, from `scriptcraft-cli scenes` or
+  File ▸ Export Scene List): scenes with `number`, `id`, `heading` and `beats`; dialogue uses the
+  cue as printed (`TOMAS (V.O.)`). Other formats or versions are refused.
+
+## Re-import by stable scene id
+
+Importing a screenplay into a board that already has work **updates** it (File ▸ Import Screenplay,
+`boardcraft-cli import-script`, command `import_script`):
+
+1. Each script scene is matched to a board scene by its stable id (`[[scene-id: …]]`, or the
+   scene list's `id`; ScriptCraft writes them with *Script ▸ Add Stable Scene IDs*), else by an
+   identical heading (first unused match, so repeated headings pair up in order).
+2. A matched scene keeps its panels' drawings, layers, cameras and durations, and takes the
+   script's heading, number and id; panel *k* takes the dialogue and action of beat *k*; new beats
+   add panels; panels beyond the script's beats are kept (they hold drawings) and counted.
+3. Scenes new to the script are added in script order; board scenes the script no longer has are
+   kept after the others and listed in the report. Nothing is ever deleted.
+4. Re-importing the same script changes nothing.
+
+`--append` (or `"merge": false`) appends the scenes instead.
 
 **Checked against ScriptCraft:** its sample screenplay imports as the same 7 scenes, with one panel
-per beat that `scriptcraft-cli scenes` lists (transitions become notes). The shape ScriptCraft writes
+per beat that `scriptcraft-cli scenes` lists (transitions become notes), and re-importing that
+scene list's JSON into the board matches all 7 scenes and changes no panel. The shape ScriptCraft writes
 (title page, section, synopsis and `FADE IN:` before the first heading, scene-id notes, cue
 extensions, shots) is covered by the hand-written test `fountain::tests::scriptcraft_handoff_shape`.
 
-## Out: animatic timeline for FilmCraft (OpenTimelineIO)
+## Out: the animatic as an editorial timeline
 
-File ▸ Export Animatic Timeline (OTIO) writes `<name>.otio` and `<name>_stills/`:
+File ▸ Export Animatic Timeline ▸ *format*, or `boardcraft-cli export board.boardcraft cut.<ext>`.
+Every format is written by `craft-timeline` (craft-libs) from one neutral model, and comes with
+`<name>_stills/`: `s<scene>_p<panel>.png`, the camera's view at the panel's first frame at the
+project resolution, referenced by absolute path.
 
-- one `Timeline.1` at the project rate, one video `Track.1`, one `Clip.2` per panel in board order
-  with the panel's duration;
-- each clip references `s<scene>_p<panel>.png` (the camera's view at the panel's first frame, at the
-  project resolution) by absolute `file://` URL;
-- one `Marker.2` per scene on the timeline stack (`"<number> <heading>"`, comment = scene id);
-- the panel's dialogue, action, notes, scene and camera keys in the clip's `metadata.boardcraft`.
+- One video track, one clip per panel in board order, named `Panel <scene>.<panel>`, lasting the
+  panel's duration at the project rate.
+- One marker per scene at its first panel: `<number> <heading>`, comment = the scene's stable id
+  (EDL: a `* LOC:` locator).
+- OTIO keeps the panel id, scene, dialogue, action, notes and camera keys in each clip's
+  `metadata.boardcraft`. The EDL names each still in `* FROM CLIP NAME:` and `* SOURCE FILE:`.
 
-FilmCraft imports OTIO (`filmcraft-interchange`). The export was checked against that importer:
-the demo board loads as one 24 fps sequence with eight clips at the right times, three scene markers,
-eight still media items and an empty import report. To repeat the check, point a scratch crate at a
-FilmCraft checkout's `crates/interchange` and call
-`filmcraft_interchange::import(bytes, Format::Otio, None)` on the exported file.
+| Format | Extension | Read by |
+|---|---|---|
+| OpenTimelineIO | `.otio` | FilmCraft, and most editors through OTIO adapters |
+| CMX 3600 EDL | `.edl` | every editor |
+| Final Cut Pro 7 XML (`xmeml` 5) | `.xml` | FilmCraft, Premiere Pro, DaVinci Resolve, Avid (via import) |
+| FCPXML 1.10 | `.fcpxml` | FilmCraft, Final Cut Pro, DaVinci Resolve |
 
-Not carried yet: camera moves (they play in BoardCraft's animatic; FilmCraft gets the start frame).
+**Checked against FilmCraft:** each of the four exports of the demo board, opened with FilmCraft's
+own importers (`filmcraft-interchange`), gives one 24 fps sequence of eight clips with the board's
+durations, three scene markers and all eight stills found; the EDL's only note is that EDLs carry no
+frame rate (FilmCraft assumes 24).
+
+Camera moves are not carried yet (the stills are each panel's first camera frame).
+
+## In: conform timing from an edit
+
+When the editor retimes the animatic, File ▸ Conform Timing from Edit (`boardcraft-cli conform`,
+command `conform`) reads the edited timeline in any of the four formats and sets each panel's
+duration to its clip's, rounded to whole frames at the board's rate. Clips are matched by the panel
+id in OTIO metadata, then by the clip name `Panel 1.2`, then by the still's file name. The report
+lists clips that are not from this board and panels the edit no longer uses; panel order and
+deleted panels are reported, not applied.
 
 ## Out: panel images
 

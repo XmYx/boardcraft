@@ -11,6 +11,7 @@ use crate::camera::CameraKey;
 use crate::error::{Error, Result};
 use crate::fountain;
 use crate::model::{Id, MAX_PANEL_FRAMES, Project};
+use crate::script::{ScriptFormat, parse_script_as, reimport};
 
 /// A panel text field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +90,28 @@ pub enum Command {
     ImportFountain {
         text: String,
     },
+    /// Import a screenplay (Fountain, Final Draft `.fdx` or ScriptCraft scene list JSON; detected
+    /// from `name` and the text unless `format` is given). `merge` (the default) updates the board
+    /// by stable scene id (see `script::reimport`); otherwise the scenes are appended.
+    ImportScript {
+        #[serde(default)]
+        name: String,
+        text: String,
+        #[serde(default)]
+        format: Option<ScriptFormat>,
+        #[serde(default = "yes")]
+        merge: bool,
+    },
+    /// Take panel timing from an edited timeline (OTIO, EDL, FCP7 XML or FCPXML; detected from
+    /// `name` and the text).
+    Conform {
+        name: String,
+        text: String,
+    },
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// What a command did.
@@ -218,6 +241,21 @@ pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
             p.touch();
             ok("layer opacity set")
         }
+        Command::ImportScript { name, text, format, merge } => {
+            let format = format.unwrap_or_else(|| ScriptFormat::detect(name, text.as_bytes()));
+            let script = parse_script_as(format, name, text.as_bytes())?;
+            if *merge {
+                let r = reimport(project, &script);
+                ok(r.summary())
+            } else {
+                let (s, n) = fountain::append_to_project(project, &script);
+                ok(format!("added {s} scenes, {n} panels"))
+            }
+        }
+        Command::Conform { name, text } => {
+            let r = crate::timeline::conform(project, std::path::Path::new(name), text.as_bytes())?;
+            ok(r.summary())
+        }
         Command::ImportFountain { text } => {
             let script = fountain::parse(text);
             let (s, n) = fountain::append_to_project(project, &script);
@@ -251,6 +289,13 @@ mod tests {
         assert_eq!(p.panel(second).unwrap().camera.keys.len(), 1);
         apply(&mut p, &Command::ImportFountain { text: "INT. A\n\nRain.\n".into() }).unwrap();
         assert_eq!(p.scenes.len(), 2);
+        // Merging the same script again matches the scene by heading instead of adding it.
+        let cmd = parse(r#"{"cmd":"import_script","name":"a.fountain","text":"INT. A\n\nRain, harder.\n"}"#).unwrap();
+        let out = apply(&mut p, &cmd).unwrap();
+        assert_eq!(p.scenes.len(), 2, "{}", out.message);
+        let a = p.scenes.iter().find(|s| s.heading == "INT. A").unwrap();
+        assert_eq!(a.panels[0].action, "Rain, harder.");
+        assert_eq!(p.scenes[0].heading, "INT. A", "script scenes first, scenes the script lacks after");
     }
 
     #[test]

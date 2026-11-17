@@ -7,7 +7,6 @@ app	A panel keeps at least one layer
 app	AI panel sketch
 app	AI sketch
 app	Action
-app	Added {scenes} scenes, {n} panels from {file}
 app	Animatic timeline
 app	Board
 app	Board (panel grid)
@@ -21,12 +20,15 @@ app	Camera moves
 shared	Cancel
 shared	Clear
 shared	Colour
+app	Conform Timing from Edit…
+app	Conformed timing from {file}: {summary}
 app	Could not import {file}: {error}
 app	Could not open: {error}
 app	Could not read {file}: {error}
 shared	Delete
 app	Delete Panel
-app	Delete key
+app	Delete key {f}
+app	Delete the camera key at frame {f}
 app	Demo board: Paper Boats
 app	Dialogue
 shared	Don't Save
@@ -38,12 +40,12 @@ app	Edit key:
 app	End
 app	Erase (E)
 shared	Eraser
-app	Export Animatic Timeline (OTIO)…
+app	Export Animatic Timeline
 app	Export Panel Images (PNG)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
 shared	File
-app	Fountain screenplay
+app	Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings.
 app	Generate a sketch for this panel with the shared Craft AI tools (not connected yet)
 app	Go to start
 app	Hardness
@@ -52,14 +54,13 @@ shared	Image
 shared	Images
 app	Import Image to Panel…
 app	Import Image…
-app	Import Screenplay (Fountain)…
+app	Import Screenplay…
 app	Imported {file}
 app	Key at end
 app	Key at start
 shared	Language
 shared	Layer
 shared	Layers
-shared	More
 shared	Move Down
 app	Move Earlier
 app	Move Later
@@ -72,8 +73,6 @@ app	New Scene
 app	New panel at the end of this scene
 app	No panel selected.
 app	Notes
-shared	Opacity
-app	OpenTimelineIO
 app	Opened {file}
 shared	Open…
 shared	Panel
@@ -98,6 +97,7 @@ app	Save the board before quitting?
 app	Saved {file}
 app	Scene
 app	Scene {number}
+app	Screenplay
 app	Select a panel first
 app	Select a panel.
 app	Select a visible layer to draw on
@@ -105,14 +105,20 @@ shared	Size
 app	Start
 app	Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view.
 shared	System
+app	Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
+shared	Timeline
 app	To Start
 app	Undo Drawing
 shared	Unsaved changes
+app	Updated the board from {file}: {summary}
 shared	View
-app	Visible
 app	Wrote {n} panel images to {dir}
 shared	Zoom
 app	camera move
 app	frame {f}
 app	static camera
 app	zoom
+app	{format}…
+app	{layer} opacity
+app	{layer} options
+app	{layer} visible

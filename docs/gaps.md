@@ -13,7 +13,7 @@ What stands between BoardCraft and a usable beta, most important first. Hours ar
 | 5 | Vector strokes (resolution-free, editable) | Drawing | no | 40 | — |
 | 6 | Onion skin / light table across panels | Drawing | yes | 8 | — |
 | 7 | Multi-key camera editor on the timeline | Camera | yes | 12 | — |
-| 8 | Re-import from ScriptCraft by scene id (update, not duplicate) | Interchange | yes | 10 | [interop](interop.md) |
+| 8 | Conform applies panel order and deletions from the edit (timing is applied today) | Interchange | no | 6 | [interop](interop.md) |
 | 9 | AI panel sketch through craft-ai-client | AI | no | 16 | [architecture](architecture.md) |
 | 10 | Panel transitions (cut, dissolve) in playback and export | Playback | no | 8 | — |
 | 11 | MCP server / control channel over the commands (CLI done) | Agents | no | 10 | [cli](cli.md) |

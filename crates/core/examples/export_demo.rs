@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&out)?;
     let project = boardcraft_core::demo::demo_project();
     boardcraft_core::format::save(&project, &out.join("paper-boats.boardcraft"))?;
-    let stills = boardcraft_core::otio::export_animatic(&project, &out.join("paper-boats.otio"))?;
+    let stills = boardcraft_core::timeline::export(&project, &out.join("paper-boats.otio"))?;
     println!("wrote {} and stills in {}", out.join("paper-boats.otio").display(), stills.display());
     Ok(())
 }

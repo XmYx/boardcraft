@@ -1,0 +1,1 @@
+- Import Final Draft scripts and ScriptCraft scene lists, update a board from a revised script without losing drawings, export the animatic as OTIO, EDL, Final Cut Pro 7 XML or FCPXML, and bring an editor's timing back with Conform.

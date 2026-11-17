@@ -4,11 +4,13 @@ Everything the app does to a board is a command (`boardcraft_core::command::Comm
 them headless, for scripts and agents.
 
 ```bash
-boardcraft-cli new board.boardcraft --from script.fountain   # board a screenplay
+boardcraft-cli new board.boardcraft --from script.fountain   # board a screenplay (.fountain, .fdx, .scenes.json)
 boardcraft-cli new demo.boardcraft --demo                    # the demo board
 boardcraft-cli info board.boardcraft                         # JSON: scenes, panels, layers, camera
 boardcraft-cli exec board.boardcraft '{"cmd":"set_duration","panel":3,"frames":48}'
-boardcraft-cli export-otio board.boardcraft cut.otio         # + cut_stills/
+boardcraft-cli import-script board.boardcraft script.fdx     # update the board by scene id (--append to append)
+boardcraft-cli export board.boardcraft cut.otio              # .otio, .edl, .xml (FCP7) or .fcpxml, + cut_stills/
+boardcraft-cli conform board.boardcraft edited.xml           # panel timing from an editor's cut
 boardcraft-cli export-png board.boardcraft stills/
 boardcraft-cli commands                                      # command names
 ```
@@ -37,6 +39,8 @@ Ids come from `info`. Every command is JSON with a `"cmd"` tag.
 | `set_layer_visible` | `panel`, `layer`, `visible` | |
 | `set_layer_opacity` | `panel`, `layer`, `opacity` | clamped to 0–1 |
 | `import_fountain` | `text` | append the screenplay's scenes |
+| `import_script` | `text`, `name?`, `format?` (`fountain`/`final_draft`/`scene_list`), `merge?` (default true) | update the board by scene id ([interop](interop.md)), or append |
+| `conform` | `name`, `text` | panel durations from an edited timeline (format from `name` and content) |
 
 Drawing strokes are not commands yet (pixels are edited directly, with pixel undo); see
 [gaps.md](gaps.md).

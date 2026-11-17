@@ -1,0 +1,1 @@
+| 2026-11-17 | Re-import by stable scene id; Final Draft (`.fdx`) and ScriptCraft scene-list JSON import; timeline export to OTIO, CMX 3600 EDL, FCP7 XML and FCPXML through craft-timeline (verified with FilmCraft's importers); conform panel timing from an edit |

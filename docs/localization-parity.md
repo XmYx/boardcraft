@@ -11,7 +11,7 @@ How far BoardCraft's interface is ready for other languages.
 | Offered locales | de, es, fr, id, it, ja, ko, nl, pl, pt-br, ru, uk, zh-hans, zh-hant (left-to-right only until the layout mirrors) |
 | Placeholders | `{name}` templates through `craft_i18n::fmt` (isolated for bidi) |
 | Fonts | craft-fonts faces through `CRAFT_FONTS_DIR` (`craft-fonts-build`) as fallbacks for scripts egui's fonts lack |
-| Source list | `cargo xtask strings <craft-i18n checkout>` writes [i18n/boardcraft-strings.tsv](i18n/boardcraft-strings.tsv): 116 source texts, 29 of them already in the shared `common.tsv` (marked `shared`) |
+| Source list | `cargo xtask strings <craft-i18n checkout>` writes [i18n/boardcraft-strings.tsv](i18n/boardcraft-strings.tsv): 122 source texts, 28 of them already in the shared `common.tsv` (marked `shared`) |
 | Not translated yet | error messages from `boardcraft-core` (English `Display` texts), file-dialog filter names on some platforms, the demo board's script |
 | Right to left | not offered: canvas, timeline and panel grid do not mirror yet |
 | Numbers | durations and camera values use `.` decimals; `craft_i18n::Format` adoption is a gap |
