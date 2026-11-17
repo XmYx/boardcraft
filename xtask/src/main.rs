@@ -9,6 +9,8 @@
 //! - `progress [--check]`: the RFC-0017 progress log, `ROADMAP.md`'s table joined with the
 //!   fragments in `docs/progress.d/`; `--check` validates the fragments (part of `ci`).
 //! - `version [set <x.y.z>]`: print or set `[workspace.package] version`.
+//! - `icons`: render `assets/app-icon/boardcraft.svg` to the hicolor PNGs, the 1024 px PNG, the
+//!   Windows `.ico` and the macOS `.icns` (all committed, so packaging needs no tools).
 //! - `strings [<craft-i18n checkout>]`: write every interface source text (`tl!`/`tlf!`) to
 //!   `docs/i18n/boardcraft-strings.tsv`, marking the ones the shared catalog already has.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -331,6 +333,95 @@ fn strings(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+const ICON_ID: &str = "ai.storyteller.boardcraft";
+const HICOLOR: [u32; 8] = [16, 24, 32, 48, 64, 128, 256, 512];
+
+/// Render the icon SVG at `size` px, as straight-alpha RGBA.
+fn render_icon(svg: &[u8], size: u32) -> Result<Vec<u8>, String> {
+    use craft_svg::tree::{self, usvg};
+    let limits = tree::Limits::default();
+    let t = tree::parse(svg, &limits, &usvg::Options::default()).map_err(|e| format!("icon SVG: {e:?}"))?;
+    let k = size as f32 / t.size().width().max(1.0);
+    let pix = tree::draw::render(&t, usvg::Transform::from_scale(k, k), size, size, 0, 1 << 30).map_err(|e| format!("render: {e:?}"))?;
+    let mut rgba = pix.data().to_vec();
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3] as u32;
+        if a > 0 && a < 255 {
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
+    Ok(rgba)
+}
+
+fn png(rgba: Vec<u8>, size: u32) -> Result<Vec<u8>, String> {
+    use craft_image_codecs::{ChannelLayout, EncodeOptions, Format, Image, SampleType};
+    let img = Image::from_raw(size, size, ChannelLayout::Rgba, SampleType::U8, rgba).map_err(|e| e.to_string())?;
+    craft_image_codecs::encode(&img, Format::Png, &EncodeOptions::default()).map_err(|e| e.to_string())
+}
+
+/// ICO with PNG entries (Windows Vista and later read PNG-compressed icon images).
+fn ico(entries: &[(u32, Vec<u8>)]) -> Vec<u8> {
+    let mut out = vec![0, 0, 1, 0];
+    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+    let mut offset = 6 + 16 * entries.len() as u32;
+    for (size, data) in entries {
+        let b = if *size >= 256 { 0 } else { *size as u8 };
+        out.extend_from_slice(&[b, b, 0, 0, 1, 0, 32, 0]);
+        out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        out.extend_from_slice(&offset.to_le_bytes());
+        offset += data.len() as u32;
+    }
+    for (_, data) in entries {
+        out.extend_from_slice(data);
+    }
+    out
+}
+
+/// ICNS with PNG entries (macOS 10.7 and later).
+fn icns(entries: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
+    let total: usize = 8 + entries.iter().map(|(_, d)| 8 + d.len()).sum::<usize>();
+    let mut out = b"icns".to_vec();
+    out.extend_from_slice(&(total as u32).to_be_bytes());
+    for (kind, data) in entries {
+        out.extend_from_slice(*kind);
+        out.extend_from_slice(&((8 + data.len()) as u32).to_be_bytes());
+        out.extend_from_slice(data);
+    }
+    out
+}
+
+fn icons() -> Result<(), String> {
+    let dir = root().join("assets/app-icon");
+    let svg = std::fs::read(dir.join("boardcraft.svg")).map_err(|e| e.to_string())?;
+    let mut by_size = std::collections::BTreeMap::new();
+    for size in HICOLOR.into_iter().chain([1024]) {
+        by_size.insert(size, png(render_icon(&svg, size)?, size)?);
+    }
+    let get = |s: u32| by_size.get(&s).cloned().ok_or_else(|| format!("no {s} px render"));
+    for size in HICOLOR {
+        let d = dir.join(format!("hicolor/{size}x{size}/apps"));
+        std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+        std::fs::write(d.join(format!("{ICON_ID}.png")), get(size)?).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(dir.join("boardcraft-1024.png"), get(1024)?).map_err(|e| e.to_string())?;
+    let ico_entries: Vec<(u32, Vec<u8>)> = [16, 24, 32, 48, 64, 128, 256].into_iter().map(|s| get(s).map(|d| (s, d))).collect::<Result<_, _>>()?;
+    std::fs::write(dir.join("boardcraft.ico"), ico(&ico_entries)).map_err(|e| e.to_string())?;
+    let icns_entries = vec![
+        (b"icp4", get(16)?),
+        (b"icp5", get(32)?),
+        (b"icp6", get(64)?),
+        (b"ic07", get(128)?),
+        (b"ic08", get(256)?),
+        (b"ic09", get(512)?),
+        (b"ic10", get(1024)?),
+    ];
+    std::fs::write(dir.join("boardcraft.icns"), icns(&icns_entries)).map_err(|e| e.to_string())?;
+    println!("icons: {} hicolor sizes, 1024 px, .ico, .icns written to {}", HICOLOR.len(), dir.display());
+    Ok(())
+}
+
 fn ci() -> Result<(), String> {
     cargo(&["fmt", "--all", "--check"])?;
     cargo(&["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])?;
@@ -352,7 +443,8 @@ fn main() -> ExitCode {
         "progress" => progress(rest.first().is_some_and(|a| a == "--check")),
         "version" => version(rest),
         "strings" => strings(rest),
-        _ => Err("usage: cargo xtask <ci|layers|assets|licenses|progress [--check]|version [set X]|strings [craft-i18n dir]>".into()),
+        "icons" => icons(),
+        _ => Err("usage: cargo xtask <ci|layers|assets|licenses|progress [--check]|version [set X]|strings [craft-i18n dir]|icons>".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -366,6 +458,17 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::license_ok;
+
+    #[test]
+    fn icon_containers() {
+        let i = super::ico(&[(16, vec![1, 2]), (256, vec![3])]);
+        assert_eq!(&i[..6], &[0, 0, 1, 0, 2, 0]);
+        assert_eq!(i[6 + 16], 0, "256 px is written as 0");
+        assert_eq!(i.len(), 6 + 32 + 3);
+        let n = super::icns(&[(b"ic07", vec![9; 4])]);
+        assert_eq!(&n[..4], b"icns");
+        assert_eq!(u32::from_be_bytes([n[4], n[5], n[6], n[7]]) as usize, n.len());
+    }
 
     #[test]
     fn spdx_expressions() {

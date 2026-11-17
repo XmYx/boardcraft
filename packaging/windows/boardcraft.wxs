@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- BoardCraft Windows installer (WiX v4/v5). Built by packaging/windows/package.ps1.
+     UpgradeCode is BoardCraft's own and must never change: it ties every version together. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="BoardCraft" Manufacturer="Learning Machines LLC" Version="$(var.Version)" UpgradeCode="83FEB4DD-3BC7-46D7-B06A-8186B9376AE1" Scope="perUserOrMachine">
+    <SummaryInformation Description="BoardCraft storyboards and animatics" Manufacturer="Learning Machines LLC" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of BoardCraft is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="BoardcraftExe" SourceFile="$(var.Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="BoardcraftExe" />
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="BoardCraft" />
+    </StandardDirectory>
+    <Feature Id="Main" Title="BoardCraft">
+      <ComponentGroupRef Id="Files" />
+    </Feature>
+    <ComponentGroup Id="Files" Directory="INSTALLFOLDER">
+      <Component Id="BoardcraftApp" Guid="5A9D1455-BF90-4A11-ACC2-FF70F0CE2C6A">
+        <File Id="BoardcraftExeFile" Source="$(var.BinDir)\boardcraft.exe" KeyPath="yes" />
+        <File Id="BoardcraftCliFile" Source="$(var.BinDir)\boardcraft-cli.exe" />
+        <File Id="LicenseMit" Source="$(var.Root)\LICENSE-MIT" />
+        <File Id="LicenseApache" Source="$(var.Root)\LICENSE-APACHE" />
+        <File Id="Notice" Source="$(var.Root)\NOTICE" />
+        <File Id="Attribution" Source="$(var.Root)\ATTRIBUTION.md" />
+        <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="BoardCraft" Description="Storyboards and animatics" Target="[INSTALLFOLDER]boardcraft.exe" WorkingDirectory="INSTALLFOLDER" Icon="BoardcraftExe" />
+        <ProgId Id="BoardCraft.Board" Description="BoardCraft Board" Icon="BoardcraftExe" IconIndex="0">
+          <Extension Id="boardcraft" ContentType="application/vnd.storytold.boardcraft+zip">
+            <Verb Id="open" Command="Open" TargetFile="BoardcraftExeFile" Argument="&quot;%1&quot;" />
+          </Extension>
+        </ProgId>
+        <RegistryValue Root="HKMU" Key="Software\Classes\.fountain\OpenWithProgids" Name="BoardCraft.Board" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\.fdx\OpenWithProgids" Name="BoardCraft.Board" Value="" Type="string" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>

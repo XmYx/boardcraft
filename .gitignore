@@ -3,3 +3,4 @@
 /plan/
 *.boardcraft.tmp
 /dist
+/.claude/

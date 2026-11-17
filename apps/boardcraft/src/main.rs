@@ -46,8 +46,15 @@ fn main() -> eframe::Result {
     };
     let Cli { screenshot, .. } = &cli;
     let size = if screenshot.is_some() { [1600.0, 1000.0] } else { [1440.0, 900.0] };
+    let icon =
+        eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.boardcraft.png")).unwrap_or_default();
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("BoardCraft").with_app_id(APP_ID).with_inner_size(size).with_min_inner_size([800.0, 560.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_title("BoardCraft")
+            .with_app_id(APP_ID)
+            .with_icon(icon)
+            .with_inner_size(size)
+            .with_min_inner_size([800.0, 560.0]),
         ..Default::default()
     };
     eframe::run_native("BoardCraft", options, Box::new(move |cc| Ok(Box::new(app::BoardApp::new(cc, cli)))))
