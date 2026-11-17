@@ -6,6 +6,9 @@
 //! panels are the animatic.
 //!
 //! - [`raster`]: straight-alpha RGBA8 canvases and the pressure-aware round brush and eraser.
+//! - [`pen`]: pen pressure curve and the stroke stabilizer.
+//! - [`select`]: lasso and rectangle selections; move, scale and rotate selected pixels.
+//! - [`fill`]: bucket fill with tolerance and gap closing.
 //! - [`camera`]: camera keyframes and the eased pan/zoom between them.
 //! - [`fountain`]: Fountain screenplay import (scene headings, action, dialogue), the hand-off from
 //!   ScriptCraft.
@@ -30,11 +33,14 @@ pub mod camera;
 pub mod command;
 pub mod demo;
 pub mod error;
+pub mod fill;
 pub mod format;
 pub mod fountain;
 pub mod model;
+pub mod pen;
 pub mod raster;
 pub mod script;
+pub mod select;
 pub mod sheet;
 pub mod shotlist;
 pub mod stills;

@@ -11,6 +11,14 @@ company's product or feature names appear as labels.
 | Animatic | playback of the panels for their durations through their camera moves |
 | Camera tool, camera keys | pan/zoom keyframes of a panel |
 | Brush, Eraser | raster drawing tools |
+| Pen Settings | pressure curve, minimum size and stabilizer for the pen |
+| Pressure curve | how pen force maps to line size (gamma) |
+| Stabilizer | smoothing of strokes as they are drawn (0–10) |
+| Lasso, Rectangle select | select part of a layer by a freehand outline or a rectangle |
+| Apply Transform, Cancel Selection | keep or drop a moved, scaled or rotated selection |
+| Cut / Copy / Paste / Delete Selection, Select All | selection editing |
+| Fill | bucket fill; Tolerance, Close gaps, This layer / All visible layers |
+| View rotation | turning the canvas view (pixels unchanged) |
 | Import Screenplay | board a screenplay, or update the board from it by scene id |
 | Export Animatic Timeline ▸ *format* | timeline + stills for an editor (formats named by their specifications) |
 | Conform Timing from Edit | take panel durations from an editor's cut |

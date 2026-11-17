@@ -15,7 +15,7 @@ decode, PNG encode), `craft-atomic` (crash-safe saves), `craft-i18n` (interface 
 `craft-fonts-build` (optional craft-fonts faces), `craft-timeline` (OTIO, EDL, FCP7 XML and FCPXML
 read and write through one neutral model), `craft-xml` (Final Draft), `craft-pdf` (board sheets; its patched Krilla is pinned in
 `[patch.crates-io]` as DeckCraft does), `craft-ai-core` (AI role
-declaration).
+declaration), `craft-settings` (the user's pen preferences in `config.toml`).
 
 ### craft-libs API gaps (not filled by copying code)
 
@@ -56,6 +56,14 @@ fifth of the radius, with smoothstep edge falloff by `hardness`; pressure scales
 opacity. The eraser lowers alpha with the same dab. `render_view` resamples a normalized rectangle
 (bilinear, supersampled when shrinking) for camera views, stills and thumbnails.
 
+Around it, as pure functions with tests: `pen` (pressure gamma curve; the stabilizer, a moving
+average of the last 1 + 2 × strength input points that catches up with the pen when it lifts),
+`select` (polygon and rectangle masks by scanline, copy/clear by mask, move/scale/rotate about the
+selection's centre with bilinear resampling, exact for whole-pixel moves) and `fill` (iterative
+scanline flood fill with per-channel tolerance, gap closing by dilating the line art and growing the
+fill back under it, and a one-pixel underlay so anti-aliased edges leave no halo). `fill`,
+`transform_selection` and `clear_selection` are also commands.
+
 ## Camera (`camera`)
 
 A key frames a rectangle with the canvas aspect: centre (normalized) and zoom (1 = whole canvas).
@@ -67,6 +75,10 @@ the frame never leaves the canvas.
 - `app.rs`: state, menus, file actions, shortcuts, pixel undo, playback clock, screenshot mode.
 - `board.rs`: Board view; `canvas.rs`: Panel view (drawing, camera tool, playback picture);
   `timeline.rs`: timeline strip; `inspector.rs`: panel properties, layers, camera keys.
+- `tools/`: pen settings and their persistence (`pen.rs`), selections (`selection.rs`; a floating
+  selection is shown through a preview texture and touches the project only when applied, so it is
+  one undo step), the view transform with rotation (`view.rs`), fill and the tools' shortcuts and
+  menu entries (`mod.rs`).
 - `textures.rs`: one full-size and one thumbnail texture per panel, rebuilt on `revision`.
 - Playback renders nothing per frame on the CPU: it draws the panel's texture with UV coordinates
   from the camera view.

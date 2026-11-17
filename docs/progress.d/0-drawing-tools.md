@@ -1,0 +1,1 @@
+| 2026-11-17 | Drawing tools: pen pressure curve, minimum size and stabilizer (craft-settings preferences); lasso and rectangle select with move/scale/rotate by drag, keys or typed values, cut/copy/paste/delete; bucket fill with tolerance and gap closing; view rotation; `fill`, `transform_selection`, `clear_selection` commands; kittest keyboard and undo tests |

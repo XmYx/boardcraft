@@ -3,20 +3,15 @@
 use boardcraft_core::{CameraKey, Id, StrokePoint};
 
 use crate::app::{BoardApp, CanvasTool, KeyChoice, StrokeState};
-
-const FULL_UV: egui::Rect = egui::Rect { min: egui::pos2(0.0, 0.0), max: egui::pos2(1.0, 1.0) };
-
-fn view_rect(rect: egui::Rect, v: [f32; 4]) -> egui::Rect {
-    egui::Rect::from_min_max(
-        egui::pos2(rect.left() + v[0] * rect.width(), rect.top() + v[1] * rect.height()),
-        egui::pos2(rect.left() + v[2] * rect.width(), rect.top() + v[3] * rect.height()),
-    )
-}
+use crate::tools::view::ViewXf;
 
 fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.selectable_value(&mut app.tool, CanvasTool::Brush, tl!("Brush")).on_hover_text(tl!("Draw (B)"));
         ui.selectable_value(&mut app.tool, CanvasTool::Eraser, tl!("Eraser")).on_hover_text(tl!("Erase (E)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::Lasso, tl!("Lasso")).on_hover_text(tl!("Select a freehand area of the layer (L)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::RectSelect, tl!("Rectangle select")).on_hover_text(tl!("Select a rectangle of the layer (M)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::Fill, tl!("Fill")).on_hover_text(tl!("Fill an area with the colour (G)"));
         ui.selectable_value(&mut app.tool, CanvasTool::Camera, tl!("Camera")).on_hover_text(tl!("Drag to frame the shot, scroll to zoom (C)"));
         ui.separator();
         match app.tool {
@@ -32,6 +27,7 @@ fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
                 ui.add(egui::Slider::new(&mut app.brush.hardness, 0.0..=1.0).show_value(false)).labelled_by(l.id);
                 ui.checkbox(&mut app.brush.pressure_size, tl!("Pressure: size"));
                 ui.checkbox(&mut app.brush.pressure_opacity, tl!("Pressure: opacity"));
+                ui.menu_button(tl!("Pen Settings"), |ui| crate::tools::pen::settings_ui(&mut app.tools.pen, ui));
             }
             CanvasTool::Eraser => {
                 let l = ui.label(tl!("Size"));
@@ -42,7 +38,11 @@ fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
                 ui.radio_value(&mut app.key_choice, KeyChoice::Start, tl!("Start"));
                 ui.radio_value(&mut app.key_choice, KeyChoice::End, tl!("End"));
             }
+            CanvasTool::Lasso | CanvasTool::RectSelect => crate::tools::selection::toolbar(app, ui),
+            CanvasTool::Fill => crate::tools::fill_toolbar(app, ui),
         }
+        ui.separator();
+        crate::tools::rotation_field(app, ui);
     });
 }
 
@@ -92,6 +92,22 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     if panning && resp.dragged() {
         app.canvas_pan += resp.drag_delta();
     }
+    // Hold R and drag to turn the view about the canvas centre.
+    let turning = !ui.ctx().egui_wants_keyboard_input() && ui.input(|i| i.key_down(egui::Key::R));
+    if turning
+        && !panning
+        && resp.dragged()
+        && let Some(pos) = resp.interact_pointer_pos()
+    {
+        let c = rect.center();
+        let prev = pos - resp.drag_delta();
+        let (a0, a1) = ((prev - c).angle(), (pos - c).angle());
+        if a0.is_finite() && a1.is_finite() {
+            crate::tools::rotate_view(app, (a1 - a0).to_degrees());
+        }
+    }
+    let xf = ViewXf::new(rect, app.tools.view_angle, settings.width, settings.height);
+    app.tools.last_view = Some(xf);
     // The canvas publishes what it shows: which panel, its layers and its camera.
     let description = match app.project.panel(panel_id) {
         Some(p) => tlf!(
@@ -102,10 +118,18 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         ),
         None => tl!("Panel canvas").to_string(),
     };
+    let mut description = description;
+    if app.tools.view_angle != 0.0 {
+        description = tlf!("{canvas}, view rotated {angle}°", canvas = description, angle = app.tools.view_angle.round());
+    }
+    if let Some(sel) = crate::tools::selection::describe(app) {
+        description = tlf!("{canvas}, {selection}", canvas = description, selection = sel);
+    }
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Canvas, true, description.clone()));
 
     let start = app.project.panel_start(panel_id).unwrap_or(0) as f64;
     let local = (app.playhead - start).max(0.0) as f32;
+    let preview = if app.playing { None } else { crate::tools::selection::preview(app, ui.ctx(), panel_id) };
     let Some(panel) = app.project.panel(panel_id) else { return };
     let duration = panel.duration.max(1);
     let tex = app.textures.full(ui.ctx(), &app.project, panel);
@@ -132,14 +156,14 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         return;
     }
     painter.rect_filled(avail.expand(12.0), 0.0, egui::Color32::from_gray(40));
-    painter.image(tex, rect, FULL_UV, egui::Color32::WHITE);
+    xf.image(&painter, preview.unwrap_or(tex), egui::Color32::WHITE);
     // Onion skin: the previous panel, faint and tinted, over the drawing.
     if app.onion
         && let Some(prev) = app.project.panels().map(|(_, p)| p.id).take_while(|id| *id != panel_id).last()
         && let Some(prev_panel) = app.project.panel(prev)
     {
         let ptex = app.textures.full(ui.ctx(), &app.project, prev_panel);
-        painter.image(ptex, rect, FULL_UV, egui::Color32::from_rgba_unmultiplied(255, 110, 110, 60));
+        xf.image(&painter, ptex, egui::Color32::from_rgba_unmultiplied(255, 110, 110, 60));
     }
 
     // Camera frames: start key, end key, and the frame at the playhead.
@@ -147,16 +171,20 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     if has_keys || app.tool == CanvasTool::Camera {
         let first = panel.camera.view(0.0);
         let last = panel.camera.view(duration as f32 - 1.0);
-        painter.rect_stroke(view_rect(rect, first), 0.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 170, 90)), egui::StrokeKind::Middle);
-        painter.rect_stroke(view_rect(rect, last), 0.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(220, 120, 40)), egui::StrokeKind::Middle);
+        xf.outline_normalized(&painter, first, egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 170, 90)));
+        xf.outline_normalized(&painter, last, egui::Stroke::new(2.0, egui::Color32::from_rgb(220, 120, 40)));
         if panel.camera.moves() {
             let now = panel.camera.view(local);
-            painter.rect_stroke(view_rect(rect, now), 0.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(230, 200, 60)), egui::StrokeKind::Middle);
+            xf.outline_normalized(&painter, now, egui::Stroke::new(1.0, egui::Color32::from_rgb(230, 200, 60)));
         }
     }
 
-    let to_canvas = |p: egui::Pos2| ((p.x - rect.left()) / rect.width() * settings.width as f32, (p.y - rect.top()) / rect.height() * settings.height as f32);
-    if panning {
+    let to_canvas = |p: egui::Pos2| {
+        let c = xf.to_canvas(p);
+        (c[0], c[1])
+    };
+    if panning || turning {
+        crate::tools::selection::draw_overlay(app, &painter, &xf, panel_id);
         return;
     }
     match app.tool {
@@ -168,7 +196,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             if let Some(p) = pressure_from_input(ui) {
                 app.pen_pressure = Some(p);
             }
-            let pressure = app.pen_pressure.unwrap_or(1.0);
+            let pressure = boardcraft_core::pen::apply_curve(app.pen_pressure.unwrap_or(1.0), app.tools.pen.pressure_curve);
             if resp.drag_started()
                 && let Some(pos) = resp.interact_pointer_pos()
             {
@@ -176,7 +204,10 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                     Some(layer) => {
                         let (x, y) = to_canvas(pos);
                         let pt = StrokePoint::new(x, y, pressure);
-                        let brush = app.active_brush();
+                        let brush = crate::tools::stroke_brush(app);
+                        let mut stabilizer = boardcraft_core::pen::Stabilizer::new(app.tools.pen.stabilizer);
+                        stabilizer.push(pt);
+                        app.tools.stabilizer = Some(stabilizer);
                         // Shift: a straight line from where the last stroke on this layer ended.
                         let from = app.last_point.filter(|(p, l, _)| ui.input(|i| i.modifiers.shift) && *p == panel_id && *l == layer).map(|(_, _, q)| q);
                         match from {
@@ -201,13 +232,27 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                 && let Some(stroke) = app.stroke.as_mut()
             {
                 let (x, y) = to_canvas(pos);
-                let pt = StrokePoint::new(x, y, pressure);
+                let raw = StrokePoint::new(x, y, pressure);
+                let pt = app.tools.stabilizer.as_mut().and_then(|s| s.push(raw)).unwrap_or(raw);
                 let (pid, lid, last) = (stroke.panel, stroke.layer, stroke.last);
                 stroke.last = pt;
-                let brush = app.active_brush();
+                let brush = crate::tools::stroke_brush(app);
                 draw_segment(app, pid, lid, last, pt, &brush);
             }
             if resp.drag_stopped() {
+                // The smoothed stroke catches up with where the pen lifted.
+                let tail = app.tools.stabilizer.take().map(|mut s| s.finish()).unwrap_or_default();
+                if let Some(s) = app.stroke.as_mut() {
+                    let (pid, lid, mut last) = (s.panel, s.layer, s.last);
+                    let brush = crate::tools::stroke_brush(app);
+                    for pt in tail {
+                        draw_segment(app, pid, lid, last, pt, &brush);
+                        last = pt;
+                    }
+                    if let Some(s) = app.stroke.as_mut() {
+                        s.last = last;
+                    }
+                }
                 if let Some(s) = app.stroke.take() {
                     app.last_point = Some((s.panel, s.layer, s.last));
                 }
@@ -227,15 +272,19 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                         p.camera.set_key(CameraKey { frame: other, ..at });
                     }
                     let mut key = p.camera.keys.iter().find(|k| k.frame == frame).copied().unwrap_or_else(|| CameraKey { frame, ..p.camera.at(frame as f32) });
-                    key.center[0] += drag.x / rect.width();
-                    key.center[1] += drag.y / rect.height();
+                    let d = xf.delta_normalized(drag);
+                    key.center[0] += d.x;
+                    key.center[1] += d.y;
                     key.zoom *= (scroll * 0.003).exp();
                     p.camera.set_key(key);
                 }
                 app.edited();
             }
         }
+        CanvasTool::Lasso | CanvasTool::RectSelect => crate::tools::selection::canvas_input(app, &resp, &xf),
+        CanvasTool::Fill => crate::tools::fill_input(app, &resp, &xf),
     }
+    crate::tools::selection::draw_overlay(app, &painter, &xf, panel_id);
 }
 
 fn draw_segment(app: &mut BoardApp, panel: Id, layer: Id, from: StrokePoint, to: StrokePoint, brush: &boardcraft_core::Brush) {
