@@ -344,7 +344,7 @@ fn render_icon(svg: &[u8], size: u32) -> Result<Vec<u8>, String> {
     let k = size as f32 / t.size().width().max(1.0);
     let pix = tree::draw::render(&t, usvg::Transform::from_scale(k, k), size, size, 0, 1 << 30).map_err(|e| format!("render: {e:?}"))?;
     let mut rgba = pix.data().to_vec();
-    for px in rgba.chunks_exact_mut(4) {
+    for px in rgba.as_chunks_mut::<4>().0.iter_mut() {
         let a = px[3] as u32;
         if a > 0 && a < 255 {
             for c in &mut px[..3] {

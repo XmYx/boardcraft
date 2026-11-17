@@ -12,6 +12,7 @@ use crate::error::{Error, Result};
 use crate::fountain;
 use crate::model::{Id, MAX_PANEL_FRAMES, Project};
 use crate::script::{ScriptFormat, parse_script_as, reimport};
+use crate::select::{Mask, Transform};
 
 /// A panel text field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,6 +127,40 @@ pub enum Command {
         name: String,
         text: String,
     },
+    /// Bucket fill on a layer at canvas pixel `x, y` with `color` (straight RGBA). The area is
+    /// found on the layer itself, or on all visible layers with `all_layers`; `tolerance` (0..=255)
+    /// and `gap` (pixels, closes openings in the line art) as in `fill::FillOptions`.
+    Fill {
+        panel: Id,
+        layer: Id,
+        x: u32,
+        y: u32,
+        color: [u8; 4],
+        #[serde(default = "default_tolerance")]
+        tolerance: u8,
+        #[serde(default)]
+        all_layers: bool,
+        #[serde(default)]
+        gap: u32,
+    },
+    /// Move, scale and rotate the pixels inside `polygon` (canvas pixels; a lasso or rectangle)
+    /// about their centre.
+    TransformSelection {
+        panel: Id,
+        layer: Id,
+        polygon: Vec<[f32; 2]>,
+        transform: Transform,
+    },
+    /// Clear the pixels inside `polygon` on a layer.
+    ClearSelection {
+        panel: Id,
+        layer: Id,
+        polygon: Vec<[f32; 2]>,
+    },
+}
+
+fn default_tolerance() -> u8 {
+    crate::fill::FillOptions::default().tolerance
 }
 
 fn yes() -> bool {
@@ -143,6 +178,10 @@ pub struct Outcome {
 
 fn panel_missing(id: Id) -> Error {
     Error::NotFound(format!("panel {}", id.0))
+}
+
+fn layer_missing(id: Id) -> Error {
+    Error::NotFound(format!("layer {}", id.0))
 }
 
 fn ok(message: impl Into<String>) -> Result<Outcome> {
@@ -292,6 +331,50 @@ pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
             let (s, n) = fountain::append_to_project(project, &script);
             ok(format!("added {s} scenes, {n} panels"))
         }
+        Command::Fill { panel, layer, x, y, color, tolerance, all_layers, gap } => {
+            let settings = project.settings;
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            let sample = if *all_layers {
+                let mut out = crate::raster::Raster::new(settings.width, settings.height);
+                for l in p.layers.iter().filter(|l| l.visible && !l.pixels.is_empty()) {
+                    out.composite_over(&l.pixels, l.opacity);
+                }
+                out
+            } else {
+                p.layer(*layer).ok_or_else(|| layer_missing(*layer))?.pixels.clone()
+            };
+            let l = p.layer_mut(*layer).ok_or_else(|| layer_missing(*layer))?;
+            let opts = crate::fill::FillOptions { tolerance: *tolerance, gap: *gap };
+            let n = crate::fill::flood_fill(&mut l.pixels, &sample, *x, *y, *color, opts);
+            if n == 0 {
+                return Err(Error::Unsupported(format!("nothing to fill at {x}, {y}")));
+            }
+            p.touch();
+            ok(format!("filled {n} pixels"))
+        }
+        Command::TransformSelection { panel, layer, polygon, transform } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            let l = p.layer_mut(*layer).ok_or_else(|| layer_missing(*layer))?;
+            let mut pixels = l.pixels.clone();
+            if !crate::select::transform_region(&mut pixels, polygon, transform) {
+                return Err(Error::Unsupported("the selection is empty".into()));
+            }
+            l.pixels = pixels;
+            p.touch();
+            ok("selection transformed")
+        }
+        Command::ClearSelection { panel, layer, polygon } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            let l = p.layer_mut(*layer).ok_or_else(|| layer_missing(*layer))?;
+            let mask = Mask::polygon(l.pixels.width(), l.pixels.height(), polygon);
+            let mut pixels = l.pixels.clone();
+            if !crate::select::clear_masked(&mut pixels, &mask) {
+                return Err(Error::Unsupported("the selection is empty".into()));
+            }
+            l.pixels = pixels;
+            p.touch();
+            ok("selection cleared")
+        }
     }
 }
 
@@ -376,5 +459,32 @@ mod tests {
         apply(&mut p, &Command::SetLayerOpacity { panel: id, layer, opacity: f32::NAN }).unwrap();
         assert_eq!(p.panel(id).unwrap().duration, MAX_PANEL_FRAMES);
         assert_eq!(p.panel(id).unwrap().layers[0].opacity, 1.0);
+    }
+    #[test]
+    fn fill_and_selection_commands() {
+        let mut p = Project::blank("t");
+        let id = p.scenes[0].panels[0].id;
+        let lines = p.scenes[0].panels[0].layers[0].id;
+        let colour = apply(&mut p, &Command::AddLayer { panel: id, name: "colour".into() }).unwrap().created.unwrap();
+        let b = crate::raster::Brush { radius: 1.5, hardness: 1.0, ..crate::raster::Brush::default() };
+        p.panel_mut(id).unwrap().layer_mut(lines).unwrap().pixels.polyline(&[(10.0, 10.0), (60.0, 10.0), (60.0, 60.0), (10.0, 60.0), (10.0, 10.0)], &b);
+        // Fill the colour layer inside the outline drawn on the line layer.
+        let fill = parse(&format!(r#"{{"cmd":"fill","panel":{},"layer":{},"x":30,"y":30,"color":[200,0,0,255],"all_layers":true}}"#, id.0, colour.0)).unwrap();
+        apply(&mut p, &fill).unwrap();
+        let px = |p: &Project, l: Id, x: u32, y: u32| p.panel(id).unwrap().layer(l).unwrap().pixels.pixel(x, y);
+        assert_eq!(px(&p, colour, 30, 30), [200, 0, 0, 255]);
+        assert_eq!(px(&p, colour, 100, 100)[3], 0);
+        // Move the filled square 100 px right.
+        let poly = vec![[0.0, 0.0], [80.0, 0.0], [80.0, 80.0], [0.0, 80.0]];
+        let t = Transform { dx: 100.0, ..Transform::default() };
+        apply(&mut p, &Command::TransformSelection { panel: id, layer: colour, polygon: poly.clone(), transform: t }).unwrap();
+        assert_eq!(px(&p, colour, 30, 30)[3], 0);
+        assert_eq!(px(&p, colour, 130, 30), [200, 0, 0, 255]);
+        // Clear it; an empty selection is an error and leaves the layer alone.
+        let moved = vec![[100.0, 0.0], [180.0, 0.0], [180.0, 80.0], [100.0, 80.0]];
+        apply(&mut p, &Command::ClearSelection { panel: id, layer: colour, polygon: moved }).unwrap();
+        assert!(p.panel(id).unwrap().layer(colour).unwrap().pixels.is_blank());
+        assert!(apply(&mut p, &Command::ClearSelection { panel: id, layer: colour, polygon: vec![[1.0, 1.0]] }).is_err());
+        assert!(apply(&mut p, &Command::Fill { panel: id, layer: colour, x: u32::MAX, y: 0, color: [0; 4], tolerance: 0, all_layers: false, gap: 0 }).is_err());
     }
 }

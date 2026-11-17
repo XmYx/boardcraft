@@ -7,7 +7,7 @@ use egui_kittest::kittest::{By, Queryable};
 use crate::app::{BoardApp, CanvasTool, View};
 use crate::args::{Cli, StartView};
 
-fn harness(view: StartView) -> Harness<'static, BoardApp> {
+pub(crate) fn harness(view: StartView) -> Harness<'static, BoardApp> {
     let ctx = egui::Context::default();
     // Autosaves go to a per-test folder, never the user's data folder.
     let data = std::env::temp_dir().join(format!("boardcraft-ui-{}-{:?}", std::process::id(), std::thread::current().id()));

@@ -10,8 +10,8 @@ working storyboard artist (from [user-research.md](user-research.md) and the
 |---|---|---|---|---|---|
 | 1 | Audio track under the animatic (import WAV/MP3, waveform, scrub, keep sync on retime) | Playback | yes | 30 | [user-research](user-research.md) A5, R2 |
 | 2 | Movie export (MP4/MOV) with burn-ins: panel number, dialogue, timecode | Export | yes | 24 | A8, R4 |
-| 3 | Pen tablet tuning: pressure curve, per-OS tests, stabilizer | Drawing | yes | 16 | A1 |
-| 4 | Lasso select / move / transform, canvas rotation, fill | Drawing | yes | 30 | R6 |
+| 3 | Pen tablet tuning: ~~pressure curve, stabilizer~~ (done); per-OS tablet tests remain | Drawing | yes | 6 | A1 |
+| 4 | ~~Lasso select / move / transform, canvas rotation, fill~~ (done); anti-aliased selection edges, free-distort handles remain | Drawing | no | 6 | R6 |
 | 5 | Remappable shortcuts (craft-keymap) and a shortcut sheet | UX | yes | 10 | A15, R11 |
 | 6 | Board-sheet options in the app: fields, header text, notes lines | Printing | yes | 8 | A10, R5 |
 | 7 | Camera rotation and a multi-key camera editor on the timeline | Camera | no | 16 | R1 |
@@ -36,3 +36,15 @@ export plus FilmCraft covers it.
 Every layer is a full-canvas RGBA buffer (3.7 MB at 1280×720); undo and autosave share unchanged
 buffers, but a 300-panel board with several layers needs tiles and on-demand textures. Autosave
 re-encodes every layer each time.
+
+### Drawing tools (items 3 and 4)
+Done: pressure curve with a preview, minimum line size and a 0–10 stabilizer (Pen Settings, saved
+in the suite's `config.toml` through craft-settings); Lasso and Rectangle select with move, scale
+and rotate by drag, arrow keys or typed values, Enter/Esc, cut/copy/paste/delete; Fill with
+tolerance, gap closing and layer or all-layer sampling; view rotation (Shift+[ / Shift+] / Shift+0,
+R+drag, typed). Remaining: testing real tablets on Windows (Windows Ink), macOS and Linux
+(Wayland/X11) to confirm pressure arrives through egui; selections are hard-edged (no feathering or
+anti-aliased lasso edge); scale handles are uniform (typed width/height for non-uniform); the pixel
+clipboard is BoardCraft's own (copies also go to the system clipboard as an image, but Ctrl+V on
+Wayland only pastes BoardCraft's own copy); the lasso has no keyboard drawing (Select All plus typed
+values is the keyboard path).

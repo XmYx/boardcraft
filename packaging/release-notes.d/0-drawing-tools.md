@@ -1,0 +1,1 @@
+- Better drawing: a pressure curve, minimum line size and stroke stabilizer for pens (Pen Settings); Lasso and Rectangle select to move, scale, rotate, cut, copy and paste parts of a drawing; a Fill tool that can close small gaps; and a rotatable canvas view (Shift+[ and Shift+]).

@@ -39,8 +39,13 @@ time the panels and play the animatic, then send the cut to FilmCraft.
   panels (across scene boundaries too).
 - **Drawing.** Round brush with soft edge, size, colour and opacity; pen pressure (from tablets
   that report it) can drive size and opacity; eraser; Shift-click straight lines; layers with
-  visibility and opacity; image import; canvas zoom and pan; onion skin of the previous panel;
-  **Edit in Image Editor** sends a layer to GIMP, Krita, Photoshop or any editor and reloads it
+  visibility and opacity; image import; canvas zoom, pan and rotation (the view only; drawing
+  follows the rotated pointer); onion skin of the previous panel; **Pen Settings** with a pressure
+  curve (previewed), minimum line size and a stabilizer (0–10) kept as your preferences;
+  **Lasso** and **Rectangle select** to move, scale and rotate part of a layer by dragging the
+  selection and its handles, with the arrow keys or with typed values (Enter applies, Esc cancels),
+  plus cut, copy, paste and delete; **Fill** with tolerance, gap closing and sampling of the layer or
+  all visible layers. Every drawing tool is one undo step. **Edit in Image Editor** sends a layer to GIMP, Krita, Photoshop or any editor and reloads it
   when you save there.
 - **Board Settings.** Change the frame size and aspect ratio (16:9, 1.85, 2.39, 4:3, 1:1, 9:16,
   4:5) and the frame rate (23.976 to 60 fps) at any time, without stretching drawings or losing
@@ -100,7 +105,14 @@ cargo run --release -p boardcraft -- my.boardcraft   # open a project
 | , . / Home | playhead one frame back / forward / to the start |
 | V | Board view ↔ Panel view |
 | B / E / C | brush / eraser / camera tool |
+| L / M / G | lasso / rectangle select / fill tool |
 | [ ] | smaller / larger brush |
+| Ctrl+A | select the whole layer |
+| ← → ↑ ↓ (Shift: 10 px) | with a selection: move it |
+| Enter / Esc | with a selection: apply / cancel the move, scale or rotation |
+| Ctrl+X, Ctrl+C, Ctrl+V, Delete | cut, copy, paste, delete the selection |
+| Shift+[ Shift+] / Shift+0 | rotate the view 15° left / right, reset it |
+| R+drag | rotate the view freely |
 | Ctrl+S, Ctrl+Shift+S, Ctrl+O | save, save as, open |
 | Ctrl+Z, Ctrl+Shift+Z | undo / redo (every edit) |
 | Ctrl+N / Ctrl+D | new panel / duplicate panel after the selected one |

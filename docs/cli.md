@@ -46,6 +46,9 @@ Ids come from `info`. Every command is JSON with a `"cmd"` tag.
 | `import_fountain` | `text` | append the screenplay's scenes |
 | `import_script` | `text`, `name?`, `format?` (`fountain`/`final_draft`/`scene_list`), `merge?` (default true) | update the board by scene id ([interop](interop.md)), or append |
 | `conform` | `name`, `text` | panel durations from an edited timeline (format from `name` and content) |
+| `fill` | `panel`, `layer`, `x`, `y`, `color` [r, g, b, a], `tolerance?` (default 32), `all_layers?`, `gap?` | bucket fill at a canvas pixel; the area is found on the layer or on all visible layers |
+| `transform_selection` | `panel`, `layer`, `polygon` [[x, y], …], `transform` {`dx`, `dy`, `scale_x`, `scale_y`, `angle`} | move, scale and rotate (degrees, about the selection's centre) the pixels inside the polygon |
+| `clear_selection` | `panel`, `layer`, `polygon` | clear the pixels inside the polygon |
 
 Drawing strokes are not commands yet (pixels are edited directly, with pixel undo); see
 [gaps.md](gaps.md).

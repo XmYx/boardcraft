@@ -48,11 +48,29 @@ pub struct Brush {
     pub pressure_size: bool,
     /// Pen pressure scales the dab opacity.
     pub pressure_opacity: bool,
+    /// Dab size at zero pressure, as a fraction of `radius` (when `pressure_size` is on).
+    #[serde(default = "default_min_size")]
+    pub min_size: f32,
+}
+
+/// The default [`Brush::min_size`]: a quarter of the full size.
+pub const DEFAULT_MIN_SIZE: f32 = 0.25;
+
+fn default_min_size() -> f32 {
+    DEFAULT_MIN_SIZE
 }
 
 impl Default for Brush {
     fn default() -> Self {
-        Self { tool: Tool::Brush, radius: 3.0, color: [24, 24, 28, 255], hardness: 0.7, pressure_size: true, pressure_opacity: false }
+        Self {
+            tool: Tool::Brush,
+            radius: 3.0,
+            color: [24, 24, 28, 255],
+            hardness: 0.7,
+            pressure_size: true,
+            pressure_opacity: false,
+            min_size: DEFAULT_MIN_SIZE,
+        }
     }
 }
 
@@ -141,7 +159,12 @@ impl Raster {
         }
     }
 
-    fn index(&self, x: i64, y: i64) -> Option<usize> {
+    /// RGBA8 bytes for writing (copies a shared buffer first).
+    pub(crate) fn data_mut(&mut self) -> &mut [u8] {
+        Arc::make_mut(&mut self.data).as_mut_slice()
+    }
+
+    pub(crate) fn index(&self, x: i64, y: i64) -> Option<usize> {
         if x < 0 || y < 0 || x >= self.width as i64 || y >= self.height as i64 {
             return None;
         }
@@ -149,7 +172,7 @@ impl Raster {
     }
 
     /// Composite `color` (straight alpha) with `coverage` (0..=1) over the pixel at `i`.
-    fn paint_px(&mut self, i: usize, color: [u8; 4], coverage: f32) {
+    pub(crate) fn paint_px(&mut self, i: usize, color: [u8; 4], coverage: f32) {
         let Some(px) = Arc::make_mut(&mut self.data).get_mut(i..i + 4) else { return };
         let a = (color[3] as f32 / 255.0) * coverage.clamp(0.0, 1.0);
         if a <= 0.0 {
@@ -167,6 +190,23 @@ impl Raster {
         px[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
     }
 
+    /// Put `color` behind the pixel at `i` (the existing paint stays on top).
+    pub(crate) fn paint_under_px(&mut self, i: usize, color: [u8; 4]) {
+        let Some(px) = Arc::make_mut(&mut self.data).get_mut(i..i + 4) else { return };
+        let top = [px[0], px[1], px[2], px[3]];
+        let ta = top[3] as f32 / 255.0;
+        let ba = color[3] as f32 / 255.0;
+        let out_a = ta + ba * (1.0 - ta);
+        if out_a <= 0.0 {
+            return;
+        }
+        for c in 0..3 {
+            let v = (top[c] as f32 * ta + color[c] as f32 * ba * (1.0 - ta)) / out_a;
+            px[c] = v.round().clamp(0.0, 255.0) as u8;
+        }
+        px[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
+    }
+
     fn erase_px(&mut self, i: usize, strength: f32) {
         let Some(px) = Arc::make_mut(&mut self.data).get_mut(i + 3) else { return };
         let keep = 1.0 - strength.clamp(0.0, 1.0);
@@ -177,7 +217,8 @@ impl Raster {
     pub fn dab(&mut self, p: StrokePoint, brush: &Brush) {
         let pressure = finite_or(p.pressure, 1.0).clamp(0.0, 1.0);
         let base = finite_or(brush.radius, 1.0).clamp(0.25, 512.0);
-        let radius = if brush.pressure_size { base * (0.25 + 0.75 * pressure) } else { base };
+        let min = finite_or(brush.min_size, DEFAULT_MIN_SIZE).clamp(0.02, 1.0);
+        let radius = if brush.pressure_size { base * (min + (1.0 - min) * pressure) } else { base };
         let opacity = if brush.pressure_opacity { pressure } else { 1.0 };
         let (cx, cy) = (finite_or(p.x, -1e9), finite_or(p.y, -1e9));
         let hard = finite_or(brush.hardness, 1.0).clamp(0.0, 1.0);
@@ -447,6 +488,18 @@ mod tests {
         heavy.dab(StrokePoint::new(32.0, 32.0, 1.0), &brush);
         let count = |r: &Raster| r.data().as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count();
         assert!(count(&heavy) > 3 * count(&light));
+    }
+
+    #[test]
+    fn minimum_size_sets_the_lightest_dab() {
+        let count = |r: &Raster| r.data().as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count();
+        let mut thin = Raster::new(64, 64);
+        thin.dab(StrokePoint::new(32.0, 32.0, 0.0), &Brush { radius: 10.0, hardness: 1.0, min_size: 0.1, ..Brush::default() });
+        let mut full = Raster::new(64, 64);
+        full.dab(StrokePoint::new(32.0, 32.0, 0.0), &Brush { radius: 10.0, hardness: 1.0, min_size: 1.0, ..Brush::default() });
+        assert!(count(&full) > 20 * count(&thin), "{} vs {}", count(&full), count(&thin));
+        // A hostile value falls back to the default instead of panicking.
+        thin.dab(StrokePoint::new(32.0, 32.0, 0.5), &Brush { min_size: f32::NAN, ..Brush::default() });
     }
 
     #[test]

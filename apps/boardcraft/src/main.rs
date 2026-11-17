@@ -24,6 +24,7 @@ mod inspector;
 mod settings;
 mod textures;
 mod timeline;
+mod tools;
 #[cfg(test)]
 mod ui_tests;
 

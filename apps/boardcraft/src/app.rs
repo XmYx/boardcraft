@@ -34,6 +34,12 @@ pub enum CanvasTool {
     Eraser,
     /// Move the selected camera key; the scroll wheel zooms it.
     Camera,
+    /// Freehand selection on the active layer.
+    Lasso,
+    /// Rectangular selection on the active layer.
+    RectSelect,
+    /// Bucket fill.
+    Fill,
 }
 
 /// Which camera key the Camera tool edits.
@@ -100,6 +106,8 @@ pub struct BoardApp {
     pub last_point: Option<(Id, Id, boardcraft_core::StrokePoint)>,
     /// Boards a crashed session left; offered at start.
     pub recoverable: Vec<crate::autosave::Recoverable>,
+    /// Pen tuning, selections, fill and view rotation (`crate::tools`).
+    pub tools: crate::tools::ToolState,
 }
 
 fn pick_layer(project: &Project, panel: Option<Id>) -> Option<Id> {
@@ -159,6 +167,7 @@ impl BoardApp {
             settings_dialog: None,
             external: Vec::new(),
             last_point: None,
+            tools: crate::tools::ToolState::new(cli.data_dir.as_deref(), cli.screenshot.is_some()),
         };
         app.recoverable = app.autosave.recoverable();
         if cli.demo {
@@ -585,6 +594,7 @@ impl BoardApp {
         if ctx.egui_wants_keyboard_input() {
             return;
         }
+        crate::tools::shortcuts(self, ctx);
         use egui::{Key, KeyboardShortcut, Modifiers};
         let cmd = |k| KeyboardShortcut::new(Modifiers::COMMAND, k);
         let cmd_shift = |k| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, k);
@@ -769,6 +779,8 @@ impl BoardApp {
                     self.redo();
                 }
                 ui.separator();
+                crate::tools::edit_menu(self, ui);
+                ui.separator();
                 if ui.add(egui::Button::new(tl!("New Panel")).shortcut_text("Ctrl+N")).clicked() {
                     self.add_panel();
                 }
@@ -805,6 +817,7 @@ impl BoardApp {
                     self.canvas_zoom = 1.0;
                     self.canvas_pan = egui::Vec2::ZERO;
                 }
+                crate::tools::view_menu(self, ui);
                 ui.separator();
                 ui.menu_button(tl!("Language"), |ui| {
                     if ui.radio(self.language.is_none(), tl!("System")).clicked() {
@@ -964,6 +977,7 @@ impl eframe::App for BoardApp {
         if !self.dirty || self.close_confirmed {
             self.autosave.clear();
         }
+        self.tools.flush();
     }
 }
 
@@ -1009,6 +1023,7 @@ impl BoardApp {
 
     fn draw_inner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let ctx = ctx.clone();
+        crate::tools::tick(self);
         self.shortcuts(&ctx);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| {

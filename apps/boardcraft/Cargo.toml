@@ -25,6 +25,9 @@ serde_json = { workspace = true }
 # Autosave timestamps (house rule: time goes through chrono).
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 craft-i18n = { workspace = true }
+# Pen preferences (pressure curve, stabilizer) in the suite's config.toml.
+craft-settings = { workspace = true }
+serde = { workspace = true }
 craft-fonts-build = { workspace = true }
 
 [build-dependencies]
