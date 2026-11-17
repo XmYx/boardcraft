@@ -54,6 +54,9 @@ time the panels and play the animatic, then send the cut to FilmCraft.
   with rendered panel stills and scene markers (through craft-timeline). All four verified with
   FilmCraft's own importers.
 - **Conform.** Read an editor's cut back (any of the four) and take its panel timing.
+- **Board sheets.** Printable PDF pages (A4 or Letter, 3 or 6 panels a page; any grid from the
+  CLI) with each panel's picture, number, duration, scene heading, dialogue, action and notes, as
+  selectable text (craft-pdf).
 - **Panel images.** Export every panel as a PNG.
 - **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer,
   documented in [docs/file-format.md](docs/file-format.md). Saves are atomic.

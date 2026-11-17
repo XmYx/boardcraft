@@ -1,0 +1,1 @@
+- Print the board: File ▸ Export Board Sheet (PDF) writes A4 or Letter pages with every panel, its timing and its text.

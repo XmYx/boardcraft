@@ -20,3 +20,9 @@ craft-image-codecs = { workspace = true }
 craft-zip = { workspace = true }
 craft-timeline = { workspace = true }
 craft-xml = { workspace = true }
+craft-pdf = { workspace = true }
+skrifa = { workspace = true }
+
+[dev-dependencies]
+# A real font for the board-sheet tests.
+epaint_default_fonts = { workspace = true }

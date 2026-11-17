@@ -17,6 +17,17 @@ listed here in the same change. `cargo xtask assets` checks that every file unde
 Code-drawn content (the demo screenplay *Paper Boats* and its procedural sketches in
 `crates/core/src/demo.rs`) is original work under the project licence.
 
+## Compiled in through dependencies
+
+| Asset | Author | Source | Licence | Used for |
+|---|---|---|---|---|
+| Ubuntu Light (`Ubuntu-Light.ttf`) | Canonical Ltd. | egui's `epaint_default_fonts` crate | Ubuntu-font-1.0 | egui's interface face; board-sheet PDF text (subset) when no craft-fonts face is embedded |
+| Hack Regular | Source Foundry Authors (DejaVu parts public domain) | `epaint_default_fonts` | MIT | egui's monospace face |
+| Noto Emoji Regular | Google | `epaint_default_fonts` | OFL-1.1 | egui's emoji fallback |
+| emoji-icon-font / egui-icons | John Slegers / egui authors | `epaint_default_fonts` | MIT | egui's icon fallback |
+
+These ship with egui itself; no font file is in this repository.
+
 ## Embedded at build time from craft-fonts (`CRAFT_FONTS_DIR`)
 
 Optional: with `CRAFT_FONTS_DIR` set, the faces selected by craft-fonts' `fonts/manifest.txt` are

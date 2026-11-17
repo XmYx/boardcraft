@@ -6,7 +6,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use boardcraft_core::command::{self, Command};
 use boardcraft_core::timeline::TimelineFormat;
-use boardcraft_core::{Brush, Id, Project, Raster, Tool, format, fountain, script, stills, timeline};
+use boardcraft_core::{Brush, Id, Project, Raster, Tool, format, fountain, script, sheet, stills, timeline};
+
+/// Write a file through the core's atomic save.
+fn craft_atomic_write(path: &Path, bytes: &[u8]) -> boardcraft_core::Result<()> {
+    boardcraft_core::format::write_atomic(path, bytes)
+}
 
 /// Screenplay files BoardCraft reads.
 const SCRIPT_EXTENSIONS: &[&str] = &["fountain", "spmd", "txt", "fdx", "json"];
@@ -333,6 +338,28 @@ impl BoardApp {
         }
     }
 
+    /// Export a printable board sheet (PDF) on `paper` with `columns` × `rows` panels a page.
+    pub fn export_sheet(&mut self, paper: sheet::Paper, columns: u32, rows: u32) {
+        let Some(mut path) = Self::dialog().add_filter("PDF", &["pdf"]).set_file_name(format!("{}.pdf", self.project.name)).save_file() else { return };
+        if path.extension().is_none() {
+            path.set_extension("pdf");
+        }
+        let labels = sheet::SheetLabels {
+            dialogue: tl!("Dialogue").into(),
+            action: tl!("Action").into(),
+            notes: tl!("Notes").into(),
+            page_of: tl!("Page {n} of {total}").into(),
+            seconds: tl!("s").into(),
+        };
+        let opts = sheet::SheetOptions { paper, columns, rows, labels };
+        let (font, index) = crate::i18n::sheet_font();
+        let result = sheet::board_sheet_pdf(&self.project, &opts, font, index).and_then(|pdf| craft_atomic_write(&path, &pdf));
+        match result {
+            Ok(()) => self.status = tlf!("Wrote the board sheet {file} ({n} pages)", file = path.display(), n = sheet::page_count(&self.project, &opts)),
+            Err(e) => self.status = tlf!("Export failed: {error}", error = e),
+        }
+    }
+
     /// Export the animatic as an editorial timeline plus panel stills.
     pub fn export_timeline(&mut self, format: TimelineFormat) {
         let ext = format.extension();
@@ -651,6 +678,18 @@ impl BoardApp {
                 {
                     self.conform();
                 }
+                ui.menu_button(tl!("Export Board Sheet (PDF)"), |ui| {
+                    for (label, paper, c, r) in [
+                        (tl!("A4, 6 panels a page…"), sheet::Paper::A4, 3, 2),
+                        (tl!("A4, 3 panels a page…"), sheet::Paper::A4, 3, 1),
+                        (tl!("Letter, 6 panels a page…"), sheet::Paper::Letter, 3, 2),
+                        (tl!("Letter, 3 panels a page…"), sheet::Paper::Letter, 3, 1),
+                    ] {
+                        if ui.button(label).clicked() {
+                            self.export_sheet(paper, c, r);
+                        }
+                    }
+                });
                 if ui.button(tl!("Export Panel Images (PNG)…")).clicked() {
                     self.export_pngs();
                 }

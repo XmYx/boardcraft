@@ -4,6 +4,8 @@ app	+ Layer
 app	+ Panel
 app	= {seconds} s at {fps} fps
 app	A panel keeps at least one layer
+app	A4, 3 panels a page…
+app	A4, 6 panels a page…
 app	AI panel sketch
 app	AI sketch
 app	Action
@@ -41,6 +43,7 @@ app	End
 app	Erase (E)
 shared	Eraser
 app	Export Animatic Timeline
+app	Export Board Sheet (PDF)
 app	Export Panel Images (PNG)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
@@ -61,6 +64,8 @@ app	Key at start
 shared	Language
 shared	Layer
 shared	Layers
+app	Letter, 3 panels a page…
+app	Letter, 6 panels a page…
 shared	Move Down
 app	Move Earlier
 app	Move Later
@@ -75,6 +80,7 @@ app	No panel selected.
 app	Notes
 app	Opened {file}
 shared	Open…
+app	Page {n} of {total}
 shared	Panel
 app	Panel (draw and camera)
 app	Panel canvas
@@ -112,10 +118,12 @@ app	Undo Drawing
 shared	Unsaved changes
 app	Updated the board from {file}: {summary}
 shared	View
+app	Wrote the board sheet {file} ({n} pages)
 app	Wrote {n} panel images to {dir}
 shared	Zoom
 app	camera move
 app	frame {f}
+app	s
 app	static camera
 app	zoom
 app	{format}…

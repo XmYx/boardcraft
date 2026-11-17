@@ -135,6 +135,11 @@ pub fn save(project: &Project, path: &Path) -> Result<()> {
     craft_atomic::atomic_write(path, &bytes).map_err(|e| Error::io(path, e))
 }
 
+/// Write any file atomically (exports): a failed write leaves the previous file untouched.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    craft_atomic::atomic_write(path, bytes).map_err(|e| Error::io(path, e))
+}
+
 /// Open a `.boardcraft` file.
 pub fn load(path: &Path) -> Result<Project> {
     let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;

@@ -8,6 +8,7 @@
 //! boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
 //! boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
 //! boardcraft-cli export-png <board.boardcraft> <dir>
+//! boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
 //! boardcraft-cli commands                                # list command names
 //! ```
 //!
@@ -19,7 +20,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use boardcraft_core::{command, demo, format, fountain, stills, timeline};
+use boardcraft_core::{command, demo, format, fountain, sheet, stills, timeline};
 use serde_json::json;
 
 const USAGE: &str = "usage:
@@ -30,6 +31,7 @@ const USAGE: &str = "usage:
   boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
   boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
   boardcraft-cli export-png <board.boardcraft> <dir>
+  boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
   boardcraft-cli commands
   boardcraft-cli --version";
 
@@ -156,6 +158,28 @@ fn run(args: &[String]) -> Result<String, Fail> {
             let files = stills::write_stills(&project, Path::new(arg(2)?)).map_err(op)?;
             Ok(format!("wrote {} panel images", files.len()))
         }
+        "export-sheet" => {
+            let project = format::load(Path::new(arg(1)?)).map_err(op)?;
+            let out = Path::new(arg(2)?);
+            let mut opts = sheet::SheetOptions::default();
+            let mut i = 3;
+            while let Some(a) = args.get(i) {
+                match (a.as_str(), args.get(i + 1).map(String::as_str)) {
+                    ("--paper", Some("a4")) => opts.paper = sheet::Paper::A4,
+                    ("--paper", Some("letter")) => opts.paper = sheet::Paper::Letter,
+                    ("--grid", Some(g)) => {
+                        let (c, r) = g.split_once('x').ok_or_else(|| Fail::Usage(format!("--grid takes <cols>x<rows>, not {g}")))?;
+                        opts.columns = c.parse().map_err(|_| Fail::Usage(format!("bad grid {g}")))?;
+                        opts.rows = r.parse().map_err(|_| Fail::Usage(format!("bad grid {g}")))?;
+                    }
+                    _ => return Err(Fail::Usage(format!("unknown option {a}\n{USAGE}"))),
+                }
+                i += 2;
+            }
+            let pdf = sheet::board_sheet_pdf(&project, &opts, epaint_default_fonts::UBUNTU_LIGHT, 0).map_err(op)?;
+            format::write_atomic(out, &pdf).map_err(op)?;
+            Ok(format!("wrote {} ({} pages)", out.display(), sheet::page_count(&project, &opts)))
+        }
         other => Err(Fail::Usage(format!("unknown command {other}\n{USAGE}"))),
     }
 }
@@ -211,6 +235,10 @@ mod tests {
         let p = format::load(&board).unwrap();
         assert_eq!(p.scenes.len(), 1, "merged by heading");
         assert_eq!(p.scenes[0].panels[0].action, "Rain, harder.");
+        let pdf = dir.join("sheet.pdf");
+        assert!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--paper", "letter", "--grid", "2x2"])).is_ok());
+        assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
+        assert!(matches!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--grid", "x"])), Err(Fail::Usage(_))));
         assert!(matches!(run(&s(&["bogus"])), Err(Fail::Usage(_))));
         assert!(matches!(run(&s(&[])), Err(Fail::Usage(_))));
         std::fs::remove_dir_all(&dir).ok();

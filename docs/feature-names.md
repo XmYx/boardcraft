@@ -14,6 +14,7 @@ company's product or feature names appear as labels.
 | Import Screenplay | board a screenplay, or update the board from it by scene id |
 | Export Animatic Timeline ▸ *format* | timeline + stills for an editor (formats named by their specifications) |
 | Conform Timing from Edit | take panel durations from an editor's cut |
+| Export Board Sheet (PDF) | printable pages of panels with their text |
 | Export Panel Images (PNG) | one image per panel |
 | AI panel sketch | generate a sketch with the shared Craft AI tools (stub) |
 | Key at start / Key at end | add a camera key on the panel's first / last frame |

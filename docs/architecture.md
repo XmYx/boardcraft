@@ -13,7 +13,8 @@ Shared libraries from [storytold/craft-libs](https://github.com/storytold/craft-
 commit in the root `Cargo.toml`: `craft-zip` (container), `craft-image-codecs` (PNG/JPEG/…
 decode, PNG encode), `craft-atomic` (crash-safe saves), `craft-i18n` (interface language),
 `craft-fonts-build` (optional craft-fonts faces), `craft-timeline` (OTIO, EDL, FCP7 XML and FCPXML
-read and write through one neutral model), `craft-xml` (Final Draft), `craft-ai-core` (AI role
+read and write through one neutral model), `craft-xml` (Final Draft), `craft-pdf` (board sheets; its patched Krilla is pinned in
+`[patch.crates-io]` as DeckCraft does), `craft-ai-core` (AI role
 declaration).
 
 ### craft-libs API gaps (not filled by copying code)

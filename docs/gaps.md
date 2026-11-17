@@ -6,7 +6,7 @@ What stands between BoardCraft and a usable beta, most important first. Hours ar
 
 | # | Gap | Category | Beta | Hours | Doc |
 |---|---|---|---|---|---|
-| 1 | Board sheet export (PDF/PNG pages with panel text) | Interchange | yes | 16 | — |
+| 1 | Board sheet options in the app (grid, fields, page header/footer text, panel numbering styles) | Interchange | no | 6 | — |
 | 2 | Full undo/redo (structure, text, camera) | Editing | yes | 12 | [architecture](architecture.md) |
 | 3 | Camera moves exported as FilmCraft Motion keyframes | Interchange | yes | 10 | [interop](interop.md) |
 | 4 | Audio track (dialogue/scratch) in the animatic | Playback | yes | 24 | — |
@@ -22,9 +22,10 @@ What stands between BoardCraft and a usable beta, most important first. Hours ar
 | 14 | Memory: panel layers as tiles, textures for visible panels only | Performance | no | 12 | [architecture](architecture.md) |
 | 15 | Crash journal / autosave | Safety | yes | 6 | — |
 
-### Board sheet export
-Printable pages (N panels per page, panel number, dialogue, action, notes). Needs text rendering from
-craft-fonts; craft-libs has `craft-pdf`.
+### Board sheet options
+PDF board sheets ship (craft-pdf, `boardcraft-core::sheet`): A4/Letter, 3 or 6 panels a page in the
+app, any grid up to 6×6 from the CLI. Missing: choosing fields and header text in the app, writing
+lines for notes, right-to-left layout.
 
 ### Camera moves exported as FilmCraft Motion keyframes
 Today each panel is exported as a still of the camera's start view. FilmCraft keeps effect

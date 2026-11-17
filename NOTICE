@@ -13,7 +13,11 @@ not covered by the license above. This repository does not include them yet.
 
 Third-party material
 
-This product bundles no third-party assets. Rust dependencies are listed in Cargo.lock under their
-own permissive licenses (checked by `cargo xtask licenses`). Builds made with craft-fonts
+This repository contains no third-party assets. Rust dependencies are listed in Cargo.lock under
+their own permissive licenses (checked by `cargo xtask licenses`). Through egui
+(epaint_default_fonts) the binaries contain egui's default fonts: Ubuntu Light (Ubuntu Font
+Licence 1.0), Hack (MIT; DejaVu parts public domain), Noto Emoji (OFL-1.1) and the emoji icon font
+(MIT). Board sheets (PDF) embed a subset of Ubuntu Light, or of a craft-fonts face when the build
+embeds one. Builds made with craft-fonts
 (CRAFT_FONTS_DIR) also embed the fonts listed in its ATTRIBUTION.md; builds made with craft-i18n
 (CRAFT_I18N_DIR) embed its translation catalogs. The per-file asset list is in ATTRIBUTION.md.

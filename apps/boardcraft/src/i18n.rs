@@ -69,3 +69,9 @@ pub fn install_fonts(ctx: &egui::Context) {
     }
     ctx.set_fonts(fonts);
 }
+
+/// The face board sheets are written in: an embedded craft-fonts face that covers Latin (release
+/// builds), else egui's bundled UI face.
+pub fn sheet_font() -> (&'static [u8], u32) {
+    CRAFT_FONTS.iter().find(|f| f.has_script("Latn")).map(|f| (f.bytes, f.index)).unwrap_or((epaint_default_fonts::UBUNTU_LIGHT, 0))
+}

@@ -20,7 +20,7 @@ The estimate is a judgement per feature area, not a measurement.
 | Camera and staging | 15% | 10% |
 | Timing, audio, playback | 15% | 10% |
 | Script import / export | 15% | 50% |
-| Printing and sharing | 10% | 5% |
+| Printing and sharing | 10% | 35% |
 
 ## By feature area
 
@@ -31,7 +31,7 @@ The estimate is a judgement per feature area, not a measurement.
 | Camera | pan/zoom keys, eased, overlay | rotation, multiple keys UI, 3D layer parallax |
 | Timeline | duration retiming, playhead, scene bands | audio tracks, transitions, scrubbing audio |
 | Import | Fountain, Final Draft (`.fdx`), ScriptCraft scene list; re-import by scene id; conform timing from OTIO/EDL/FCP7 XML/FCPXML | PDF scripts, audio |
-| Export | OTIO, CMX 3600 EDL, FCP7 XML, FCPXML (+ stills), PNG panels | PDF board sheets, movie render, camera moves as keyframes |
+| Export | OTIO, CMX 3600 EDL, FCP7 XML, FCPXML (+ stills), PDF board sheets, PNG panels | movie render, camera moves as keyframes, sheet templates |
 
 ## What works today (evidence)
 

@@ -1,0 +1,1 @@
+| 2026-11-17 | PDF board sheets (craft-pdf): A4/Letter, panel grid, pictures with number, duration, scene heading, dialogue, action and notes as selectable text; File menu, `boardcraft-cli export-sheet` |

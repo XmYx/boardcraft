@@ -12,4 +12,5 @@ workspace = true
 
 [dependencies]
 boardcraft-core = { workspace = true }
+epaint_default_fonts = { workspace = true }
 serde_json = { workspace = true }

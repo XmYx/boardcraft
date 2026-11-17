@@ -26,7 +26,7 @@
 | Camera | pan/zoom keys per panel, eased, typed key values | rotation, timeline key editor, layer parallax |
 | Timing | per-panel duration, timeline edge retiming | audio track (dialogue, scratch), transitions |
 | Playback | panel durations through camera moves, captions | audio, loop range |
-| Interchange | Fountain, Final Draft and ScriptCraft JSON import; re-import by scene id; OTIO, EDL, FCP7 XML, FCPXML export; conform timing; PNG stills | camera moves as FilmCraft Motion keyframes, PDF board sheets |
+| Interchange | Fountain, Final Draft and ScriptCraft JSON import; re-import by scene id; OTIO, EDL, FCP7 XML, FCPXML export; conform timing; PDF board sheets; PNG stills | camera moves as FilmCraft Motion keyframes, sheet templates |
 | Agents | every edit a command; `boardcraft-cli` (new, info, exec, export) | MCP server / control channel |
 | Accessibility | named nodes, keyboard flows, live status, typed alternatives to drags | canvas content nodes per layer, high-contrast theme |
 | Languages | English; craft-i18n wiring ready | translations in craft-i18n |
@@ -44,7 +44,7 @@ English only until craft-i18n has `locales/<locale>/boardcraft.tsv`. See
 
 ## Upcoming
 
-1. Board sheet export (PDF/PNG pages: panels with numbers, dialogue and action).
+1. Board sheet options in the app (fields, header text, grid).
 2. Camera moves into FilmCraft as Motion keyframes.
 3. Audio: dialogue/scratch track under the animatic.
 4. Full undo/redo through the command layer.

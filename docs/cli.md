@@ -12,6 +12,7 @@ boardcraft-cli import-script board.boardcraft script.fdx     # update the board 
 boardcraft-cli export board.boardcraft cut.otio              # .otio, .edl, .xml (FCP7) or .fcpxml, + cut_stills/
 boardcraft-cli conform board.boardcraft edited.xml           # panel timing from an editor's cut
 boardcraft-cli export-png board.boardcraft stills/
+boardcraft-cli export-sheet board.boardcraft board.pdf --paper letter --grid 3x2   # printable board sheet
 boardcraft-cli commands                                      # command names
 ```
 
