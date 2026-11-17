@@ -6,10 +6,12 @@
 //! boardcraft-cli exec <board.boardcraft> <command-json>... # apply commands, save in place
 //! boardcraft-cli import-script <board.boardcraft> <script> [--append]
 //! boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
-//! boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
+//! boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml> [--reorder] [--mark-missing] [--dry-run]
 //! boardcraft-cli export-png <board.boardcraft> <dir>
 //! boardcraft-cli export-movie <board.boardcraft> <out.mp4> [--no-burn-in] [--half]
 //! boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
+//!                [--fields shot,dialogue,action,notes] [--header <text>] [--note-lines]
+//! boardcraft-cli mcp <board.boardcraft>                  # MCP server on stdio (docs/mcp.md)
 //! boardcraft-cli commands                                # list command names
 //! ```
 //!
@@ -30,42 +32,17 @@ const USAGE: &str = "usage:
   boardcraft-cli exec <board.boardcraft> <command-json>...
   boardcraft-cli import-script <board.boardcraft> <script> [--append]
   boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
-  boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
+  boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml> [--reorder] [--mark-missing] [--dry-run]
   boardcraft-cli export-png <board.boardcraft> <dir>
   boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
+                 [--fields shot,dialogue,action,notes|none] [--header <text>] [--note-lines]
   boardcraft-cli export-shotlist <board.boardcraft> <out.csv>
   boardcraft-cli export-movie <board.boardcraft> <out.mp4> [--no-burn-in] [--half]
+  boardcraft-cli mcp <board.boardcraft>
   boardcraft-cli commands
   boardcraft-cli --version";
 
-const COMMANDS: &[&str] = &[
-    "add_scene",
-    "add_panel",
-    "delete_panel",
-    "move_panel",
-    "set_duration",
-    "set_text",
-    "set_scene_heading",
-    "set_camera_key",
-    "remove_camera_key",
-    "clear_camera",
-    "add_layer",
-    "delete_layer",
-    "set_layer_visible",
-    "set_layer_opacity",
-    "import_fountain",
-    "import_script",
-    "conform",
-    "duplicate_panel",
-    "set_canvas",
-    "set_frame_rate",
-    "add_audio",
-    "move_audio",
-    "remove_audio",
-    "set_audio_anchor",
-    "set_audio_gain",
-    "set_audio_trim",
-];
+mod mcp;
 
 enum Fail {
     Usage(String),
@@ -78,6 +55,11 @@ fn op<E: std::fmt::Display>(e: E) -> Fail {
 
 fn info(path: &Path) -> Result<String, Fail> {
     let p = format::load(path).map_err(op)?;
+    serde_json::to_string_pretty(&info_json(&p)).map_err(op)
+}
+
+/// The board as `info` prints it.
+pub(crate) fn info_json(p: &boardcraft_core::Project) -> serde_json::Value {
     let scenes: Vec<_> = p
         .scenes
         .iter()
@@ -86,7 +68,7 @@ fn info(path: &Path) -> Result<String, Fail> {
                 "id": s.id.0, "number": s.number, "heading": s.heading, "source_scene_id": s.source_scene_id,
                 "panels": s.panels.iter().map(|x| json!({
                     "id": x.id.0, "label": p.panel_label(x.id), "duration": x.duration,
-                    "dialogue": x.dialogue, "action": x.action, "notes": x.notes,
+                    "dialogue": x.dialogue, "action": x.action, "notes": x.notes, "shot": x.shot,
                     "layers": x.layers.iter().map(|l| json!({"id": l.id.0, "name": l.name, "visible": l.visible, "opacity": l.opacity})).collect::<Vec<_>>(),
                     "camera": x.camera.keys,
                 })).collect::<Vec<_>>(),
@@ -104,8 +86,7 @@ fn info(path: &Path) -> Result<String, Fail> {
             })
         })
         .collect();
-    let v = json!({"name": p.name, "settings": p.settings, "total_frames": p.total_frames(), "scenes": scenes, "audio": audio});
-    serde_json::to_string_pretty(&v).map_err(op)
+    json!({"name": p.name, "settings": p.settings, "total_frames": p.total_frames(), "scenes": scenes, "audio": audio})
 }
 
 fn run(args: &[String]) -> Result<String, Fail> {
@@ -113,7 +94,7 @@ fn run(args: &[String]) -> Result<String, Fail> {
     match arg(0)? {
         "--version" | "-V" => Ok(boardcraft_core::GENERATOR.to_string()),
         "--help" | "-h" => Ok(USAGE.to_string()),
-        "commands" => Ok(COMMANDS.join("\n")),
+        "commands" => Ok(command::schemas().iter().map(|c| c.name).collect::<Vec<_>>().join("\n")),
         "new" => {
             let out = Path::new(arg(1)?);
             let mut project = boardcraft_core::Project::blank("Untitled board");
@@ -170,11 +151,27 @@ fn run(args: &[String]) -> Result<String, Fail> {
         "conform" => {
             let board = Path::new(arg(1)?);
             let path = arg(2)?;
+            let mut options = timeline::ConformOptions::default();
+            let mut dry_run = false;
+            for a in args.iter().skip(3) {
+                match a.as_str() {
+                    "--reorder" => options.reorder = true,
+                    "--mark-missing" => options.mark_missing = true,
+                    "--dry-run" => dry_run = true,
+                    other => return Err(Fail::Usage(format!("unknown option {other}\n{USAGE}"))),
+                }
+            }
             let bytes = std::fs::read(path).map_err(|e| Fail::Op(format!("{path}: {e}")))?;
             let mut project = format::load(board).map_err(op)?;
-            let r = timeline::conform(&mut project, Path::new(path), &bytes).map_err(op)?;
-            format::save(&project, board).map_err(op)?;
+            let r = timeline::conform_with(&mut project, Path::new(path), &bytes, &options).map_err(op)?;
+            if !dry_run {
+                format::save(&project, board).map_err(op)?;
+            }
             serde_json::to_string_pretty(&r).map_err(op)
+        }
+        "mcp" => {
+            mcp::serve(Path::new(arg(1)?)).map_err(Fail::Op)?;
+            Ok(String::new())
         }
         "export-png" => {
             let project = format::load(Path::new(arg(1)?)).map_err(op)?;
@@ -220,6 +217,13 @@ fn run(args: &[String]) -> Result<String, Fail> {
                         opts.columns = c.parse().map_err(|_| Fail::Usage(format!("bad grid {g}")))?;
                         opts.rows = r.parse().map_err(|_| Fail::Usage(format!("bad grid {g}")))?;
                     }
+                    ("--fields", Some(f)) => opts.fields = sheet::SheetFields::parse(f).map_err(Fail::Usage)?,
+                    ("--header", Some(h)) => opts.header = h.chars().take(sheet::MAX_HEADER).collect(),
+                    ("--note-lines", _) => {
+                        opts.note_lines = true;
+                        i += 1;
+                        continue;
+                    }
                     _ => return Err(Fail::Usage(format!("unknown option {a}\n{USAGE}"))),
                 }
                 i += 2;
@@ -236,7 +240,9 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
         Ok(text) => {
-            println!("{text}");
+            if !text.is_empty() {
+                println!("{text}");
+            }
             ExitCode::SUCCESS
         }
         Err(Fail::Usage(e)) => {
@@ -288,6 +294,13 @@ mod tests {
         assert!(std::fs::read_to_string(&csv).unwrap().starts_with("scene,"));
         let pdf = dir.join("sheet.pdf");
         assert!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--paper", "letter", "--grid", "2x2"])).is_ok());
+        let opts = ["--fields", "dialogue,notes", "--note-lines", "--header", "Draft 2"];
+        assert!(run(&s(&[&["export-sheet", b, pdf.to_str().unwrap()][..], &opts[..]].concat())).is_ok());
+        assert!(matches!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--fields", "colour"])), Err(Fail::Usage(_))));
+        let otio = dir.join("a.otio");
+        assert!(run(&s(&["conform", b, otio.to_str().unwrap(), "--reorder", "--mark-missing", "--dry-run"])).is_ok());
+        assert!(matches!(run(&s(&["conform", b, otio.to_str().unwrap(), "--bogus"])), Err(Fail::Usage(_))));
+        assert!(run(&s(&["commands"])).ok().unwrap().contains("set_duration"));
         assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
         assert!(matches!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--grid", "x"])), Err(Fail::Usage(_))));
         // Sound and a movie.

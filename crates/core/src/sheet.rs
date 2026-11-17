@@ -1,5 +1,6 @@
 //! Printable board sheets (PDF): the storyboard as pages of panels, each with its number,
-//! duration, scene heading, dialogue, action and notes.
+//! duration, scene heading and the chosen fields (shot, dialogue, action, notes), an optional
+//! header line and optional ruled lines for handwritten notes ([`SheetOptions`]).
 //!
 //! Written with `craft-pdf` (craft-libs; Krilla backend). Text is real PDF text (selectable,
 //! searchable) in the font the caller passes: the app passes an embedded craft-fonts face when the
@@ -60,6 +61,48 @@ impl Default for SheetLabels {
     }
 }
 
+/// Which panel fields a board sheet prints under each picture. The panel number and duration are
+/// always printed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SheetFields {
+    /// The shot size (`CU`, `WS`) on the label line.
+    pub shot: bool,
+    pub dialogue: bool,
+    pub action: bool,
+    pub notes: bool,
+}
+
+impl Default for SheetFields {
+    fn default() -> Self {
+        Self { shot: true, dialogue: true, action: true, notes: true }
+    }
+}
+
+impl SheetFields {
+    /// Field names as the CLI and MCP take them.
+    pub const NAMES: [&'static str; 4] = ["shot", "dialogue", "action", "notes"];
+
+    /// No field.
+    pub const NONE: SheetFields = SheetFields { shot: false, dialogue: false, action: false, notes: false };
+
+    /// From a comma-separated list of [`SheetFields::NAMES`] (`dialogue,notes`); `none` or an
+    /// empty list prints no field. `Err` names the first unknown field.
+    pub fn parse(list: &str) -> std::result::Result<SheetFields, String> {
+        let mut f = SheetFields::NONE;
+        for name in list.split(',').map(str::trim).filter(|n| !n.is_empty() && *n != "none") {
+            match name.to_ascii_lowercase().as_str() {
+                "shot" => f.shot = true,
+                "dialogue" => f.dialogue = true,
+                "action" => f.action = true,
+                "notes" => f.notes = true,
+                other => return Err(format!("unknown field {other}; fields are {}", SheetFields::NAMES.join(", "))),
+            }
+        }
+        Ok(f)
+    }
+}
+
 /// Board sheet layout.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SheetOptions {
@@ -70,13 +113,58 @@ pub struct SheetOptions {
     pub rows: u32,
     #[serde(default)]
     pub labels: SheetLabels,
+    /// Which text fields each panel prints.
+    #[serde(default)]
+    pub fields: SheetFields,
+    /// A line printed in the page header after the board name (production, episode, draft);
+    /// empty prints none. At most [`MAX_HEADER`] characters are printed.
+    #[serde(default)]
+    pub header: String,
+    /// Rule the space left under each panel's text for handwritten notes.
+    #[serde(default)]
+    pub note_lines: bool,
 }
+
+/// Longest header text printed, in characters.
+pub const MAX_HEADER: usize = 200;
 
 impl Default for SheetOptions {
     fn default() -> Self {
-        Self { paper: Paper::A4, columns: 3, rows: 2, labels: SheetLabels::default() }
+        Self { paper: Paper::A4, columns: 3, rows: 2, labels: SheetLabels::default(), fields: SheetFields::default(), header: String::new(), note_lines: false }
     }
 }
+
+/// The text blocks printed under a panel's picture: (label, body) for each chosen, non-empty field.
+pub fn printed_fields<'a>(panel: &'a Panel, opts: &'a SheetOptions) -> Vec<(&'a str, &'a str)> {
+    let f = opts.fields;
+    [
+        (f.dialogue, opts.labels.dialogue.as_str(), panel.dialogue.as_str()),
+        (f.action, opts.labels.action.as_str(), panel.action.as_str()),
+        (f.notes, opts.labels.notes.as_str(), panel.notes.as_str()),
+    ]
+    .into_iter()
+    .filter(|(on, _, body)| *on && !body.trim().is_empty())
+    .map(|(_, name, body)| (name, body))
+    .collect()
+}
+
+/// Baselines of the ruled note lines between `top` (the last text baseline) and `bottom`.
+pub fn note_line_positions(top: f32, bottom: f32) -> Vec<f32> {
+    let mut out = Vec::new();
+    if !(top.is_finite() && bottom.is_finite()) {
+        return out;
+    }
+    let mut y = top + NOTE_LINE_GAP;
+    // Bounded: a cell is never taller than a page.
+    while y <= bottom - 2.0 && out.len() < 200 {
+        out.push(y);
+        y += NOTE_LINE_GAP;
+    }
+    out
+}
+
+/// Distance between ruled note lines, in points (about 5 mm, for handwriting).
+const NOTE_LINE_GAP: f32 = 14.0;
 
 const MARGIN: f32 = 32.0;
 const HEADER: f32 = 26.0;
@@ -164,6 +252,18 @@ fn frame(s: &mut Surface, r: Rect, gray: u8, width: f32) {
     }
 }
 
+fn hline(s: &mut Surface, x0: f32, x1: f32, y: f32, gray: u8, width: f32) {
+    let mut pb = PathBuilder::new();
+    pb.move_to(x0, y);
+    pb.line_to(x1, y);
+    if let Some(path) = pb.finish() {
+        s.set_fill(None);
+        s.set_stroke(Some(Stroke { paint: Color::new(gray, gray, gray).into(), width, ..Default::default() }));
+        s.draw_path(&path);
+        s.set_stroke(None);
+    }
+}
+
 struct Cell<'a> {
     scene: &'a Scene,
     panel: &'a Panel,
@@ -226,6 +326,14 @@ fn sheet(project: &Project, opts: &SheetOptions, font_data: &[u8], index: u32) -
             let pg = opts.labels.page_of.replace("{n}", &(page_no + 1).to_string()).replace("{total}", &total.to_string());
             let w = measure.width(&pg, 8.0);
             text(&mut s, &font, 8.0, pw - MARGIN - w, MARGIN + 12.0, MUTED, &pg);
+            // The user's header line, between the name and the page count.
+            let header: String = opts.header.chars().filter(|c| !c.is_control()).take(MAX_HEADER).collect();
+            if !header.trim().is_empty() {
+                let left = MARGIN + measure.width(&project.name, 13.0) + 16.0;
+                let room = (pw - MARGIN - w - 16.0 - left).max(10.0);
+                let line = measure.wrap(header.trim(), 9.0, room, 1);
+                text(&mut s, &font, 9.0, left, MARGIN + 12.0, MUTED, line.first().map(String::as_str).unwrap_or(""));
+            }
             for (k, cell) in cells.iter().skip(page_no * per).take(per).enumerate() {
                 let (c, r) = ((k as u32) % cols, (k as u32) / cols);
                 let x = MARGIN + c as f32 * (cell_w + GUTTER);
@@ -242,7 +350,7 @@ fn sheet(project: &Project, opts: &SheetOptions, font_data: &[u8], index: u32) -
                 }
                 // Label line: number, duration, heading on a scene's first panel.
                 let mut ty = y + img_h + LABEL_PT * 1.3;
-                let shot = if cell.panel.shot.trim().is_empty() { String::new() } else { format!("   {}", cell.panel.shot.trim()) };
+                let shot = if !opts.fields.shot || cell.panel.shot.trim().is_empty() { String::new() } else { format!("   {}", cell.panel.shot.trim()) };
                 let label = format!("{}{shot}   {:.1} {}", project.panel_label(cell.panel.id), cell.panel.duration as f32 / fps, opts.labels.seconds);
                 text(&mut s, &font, LABEL_PT, x, ty, INK, &label);
                 if cell.first_of_scene && !cell.scene.heading.is_empty() {
@@ -253,12 +361,7 @@ fn sheet(project: &Project, opts: &SheetOptions, font_data: &[u8], index: u32) -
                 // Text fields, as many lines as fit.
                 let line_h = TEXT_PT * 1.3;
                 let bottom = y + cell_h;
-                for (name, body) in
-                    [(&opts.labels.dialogue, &cell.panel.dialogue), (&opts.labels.action, &cell.panel.action), (&opts.labels.notes, &cell.panel.notes)]
-                {
-                    if body.trim().is_empty() {
-                        continue;
-                    }
+                for (name, body) in printed_fields(cell.panel, opts) {
                     let left = ((bottom - ty) / line_h).floor() as usize;
                     if left < 1 {
                         break;
@@ -267,6 +370,11 @@ fn sheet(project: &Project, opts: &SheetOptions, font_data: &[u8], index: u32) -
                     for l in lines {
                         ty += line_h;
                         text(&mut s, &font, TEXT_PT, x, ty, INK, &l);
+                    }
+                }
+                if opts.note_lines {
+                    for ly in note_line_positions(ty, bottom) {
+                        hline(&mut s, x, x + cell_w, ly, 0xB0, 0.4);
                     }
                 }
             }
@@ -301,6 +409,49 @@ mod tests {
         assert!(board_sheet_pdf(&p, &o, FONT, 0).is_ok());
         assert!(board_sheet_pdf(&p, &SheetOptions::default(), b"not a font", 0).is_err());
         assert!(board_sheet_pdf(&crate::model::Project::blank("x"), &SheetOptions::default(), FONT, 0).is_ok());
+    }
+
+    #[test]
+    fn older_options_read_with_defaults() {
+        let o: SheetOptions = serde_json::from_str(r#"{"paper":"letter","columns":2,"rows":2}"#).unwrap();
+        assert_eq!(o.fields, SheetFields::default());
+        assert!(o.header.is_empty() && !o.note_lines);
+        let o: SheetOptions = serde_json::from_str(r#"{"paper":"a4","columns":3,"rows":2,"fields":{"notes":false},"note_lines":true}"#).unwrap();
+        assert!(o.fields.dialogue && !o.fields.notes && o.note_lines);
+    }
+
+    #[test]
+    fn fields_choose_what_prints() {
+        let p = crate::demo::demo_project();
+        let mut panel = p.scenes[0].panels[0].clone();
+        panel.dialogue = "BOB: Hi".into();
+        panel.action = "Rain.".into();
+        panel.notes = "Low angle".into();
+        let all = SheetOptions::default();
+        assert_eq!(printed_fields(&panel, &all), vec![("Dialogue", "BOB: Hi"), ("Action", "Rain."), ("Notes", "Low angle")]);
+        let some = SheetOptions { fields: SheetFields::parse("notes, action").unwrap(), ..Default::default() };
+        assert_eq!(printed_fields(&panel, &some), vec![("Action", "Rain."), ("Notes", "Low angle")]);
+        assert!(printed_fields(&panel, &SheetOptions { fields: SheetFields::NONE, ..Default::default() }).is_empty());
+        assert_eq!(SheetFields::parse("none"), Ok(SheetFields::NONE));
+        assert!(SheetFields::parse("shot,colour").is_err());
+    }
+
+    #[test]
+    fn header_and_note_lines_change_the_pdf() {
+        let p = crate::demo::demo_project();
+        let plain = board_sheet_pdf(&p, &SheetOptions::default(), FONT, 0).unwrap();
+        let ruled = board_sheet_pdf(&p, &SheetOptions { note_lines: true, ..Default::default() }, FONT, 0).unwrap();
+        assert_ne!(plain, ruled);
+        let long = "Episode 4 — draft 2 ".repeat(100);
+        let headed = board_sheet_pdf(&p, &SheetOptions { header: long, ..Default::default() }, FONT, 0).unwrap();
+        assert!(headed.starts_with(b"%PDF-"));
+        assert_ne!(plain, headed);
+        // Ruled lines fill the space below the text, about 5 mm apart, never past the cell.
+        let lines = note_line_positions(100.0, 160.0);
+        assert_eq!(lines, vec![114.0, 128.0, 142.0, 156.0]);
+        assert!(note_line_positions(100.0, 105.0).is_empty());
+        assert!(note_line_positions(f32::NAN, 105.0).is_empty());
+        assert!(note_line_positions(0.0, f32::MAX).len() <= 200);
     }
 
     #[test]

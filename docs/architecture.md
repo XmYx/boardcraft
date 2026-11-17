@@ -88,7 +88,12 @@ memory with the index first, then it is saved atomically.
 
 ## App (`apps/boardcraft`)
 
-- `app.rs`: state, menus, file actions, shortcuts, pixel undo, playback clock, screenshot mode.
+- `app.rs`: state, menus, file actions, pixel undo, playback clock, screenshot mode.
+- `keys.rs`: the shortcut catalog (command ids, labels, menus, default chords) on `craft-keymap`,
+  dispatch of key presses, the shared Keyboard Shortcuts dialog (`craft-keymap` `ui`), and the
+  user's overrides in `config.toml` in the data folder (`craft-settings`).
+- `sheet_dialog.rs`: Export Board Sheet options; `conform_dialog.rs`: the conform summary and
+  options before applying.
 - `board.rs`: Board view; `canvas.rs`: Panel view (drawing, camera tool, playback picture);
   `timeline.rs`: timeline strip; `inspector.rs`: panel properties, layers, camera keys.
 - `tools/`: pen settings and their persistence (`pen.rs`), selections (`selection.rs`; a floating

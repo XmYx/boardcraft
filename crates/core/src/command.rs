@@ -122,10 +122,15 @@ pub enum Command {
         merge: bool,
     },
     /// Take panel timing from an edited timeline (OTIO, EDL, FCP7 XML or FCPXML; detected from
-    /// `name` and the text).
+    /// `name` and the text). `reorder` also puts panels in the edit's order and `mark_missing`
+    /// flags panels the edit leaves out (see `timeline::ConformOptions`); both default to false.
     Conform {
         name: String,
         text: String,
+        #[serde(default)]
+        reorder: bool,
+        #[serde(default)]
+        mark_missing: bool,
     },
     /// Add a sound file (WAV, AIFF, MP3, AAC/M4A, FLAC, Ogg, Opus, …) to the audio track. It starts
     /// at `start`, or at `panel`'s first frame and anchored to it, or at frame 0. `name` defaults to
@@ -367,8 +372,9 @@ fn apply_inner(project: &mut Project, cmd: &Command) -> Result<Outcome> {
                 ok(format!("added {s} scenes, {n} panels"))
             }
         }
-        Command::Conform { name, text } => {
-            let r = crate::timeline::conform(project, std::path::Path::new(name), text.as_bytes())?;
+        Command::Conform { name, text, reorder, mark_missing } => {
+            let options = crate::timeline::ConformOptions { reorder: *reorder, mark_missing: *mark_missing };
+            let r = crate::timeline::conform_with(project, std::path::Path::new(name), text.as_bytes(), &options)?;
             ok(r.summary())
         }
         Command::AddAudio { path, name, start, panel } => {
@@ -477,6 +483,168 @@ fn apply_inner(project: &mut Project, cmd: &Command) -> Result<Outcome> {
     }
 }
 
+/// One command's JSON shape, for tools that drive the board (the MCP server, docs).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommandSchema {
+    /// The `"cmd"` tag.
+    pub name: &'static str,
+    pub description: &'static str,
+    /// A JSON Schema object of the command's fields, without the `cmd` tag.
+    pub fields: serde_json::Value,
+}
+
+/// The JSON shape of every [`Command`], in the order of the enum.
+pub fn schemas() -> Vec<CommandSchema> {
+    use serde_json::{Value, json};
+    let id = |d: &str| json!({"type": "integer", "minimum": 0, "description": d});
+    let int = |d: &str| json!({"type": "integer", "minimum": 0, "description": d});
+    let string = |d: &str| json!({"type": "string", "description": d});
+    let boolean = |d: &str| json!({"type": "boolean", "description": d});
+    let number = |d: &str| json!({"type": "number", "description": d});
+    let obj = |props: Value, required: &[&str]| json!({"type": "object", "properties": props, "required": required, "additionalProperties": false});
+    let panel = || id("Panel id (from info)");
+    let layer = || id("Layer id (from info)");
+    let schema = |name, description, fields| CommandSchema { name, description, fields };
+    vec![
+        schema("add_scene", "Append a scene with one blank panel.", obj(json!({"heading": string("Scene heading, e.g. INT. KITCHEN - NIGHT")}), &["heading"])),
+        schema(
+            "add_panel",
+            "Add a blank panel after `after`, or at the end of `scene`, or at the end of the board.",
+            obj(json!({"scene": id("Scene id"), "after": id("Panel id to add after")}), &[]),
+        ),
+        schema("delete_panel", "Delete a panel (a board keeps at least one).", obj(json!({"panel": panel()}), &["panel"])),
+        schema("duplicate_panel", "Copy a panel (drawing, text, camera, timing) right after it.", obj(json!({"panel": panel()}), &["panel"])),
+        schema(
+            "set_canvas",
+            "Change the canvas size without stretching (16–8192 px).",
+            obj(json!({"width": int("Width in pixels"), "height": int("Height in pixels")}), &["width", "height"]),
+        ),
+        schema(
+            "set_frame_rate",
+            "Change the frame rate; keep_time (default true) keeps panel lengths in seconds.",
+            obj(
+                json!({"fps": int("Whole frames per second"), "ntsc": boolean("×1000/1001, e.g. 23.976"), "keep_time": boolean("Rescale durations")}),
+                &["fps"],
+            ),
+        ),
+        schema(
+            "move_panel",
+            "Move a panel one step earlier or later in board order.",
+            obj(json!({"panel": panel(), "later": boolean("true: later, false: earlier")}), &["panel", "later"]),
+        ),
+        schema(
+            "set_duration",
+            "Set a panel's duration in frames.",
+            obj(json!({"panel": panel(), "frames": int("Duration in frames (1 or more)")}), &["panel", "frames"]),
+        ),
+        schema(
+            "set_text",
+            "Set a panel text field.",
+            obj(
+                json!({"panel": panel(), "field": {"type": "string", "enum": ["dialogue", "action", "notes", "shot"]}, "text": string("The text")}),
+                &["panel", "field", "text"],
+            ),
+        ),
+        schema("set_scene_heading", "Set a scene's heading.", obj(json!({"scene": id("Scene id"), "heading": string("Heading")}), &["scene", "heading"])),
+        schema(
+            "set_camera_key",
+            "Add or replace the camera key on key.frame (center in 0–1 of the canvas, zoom ≥ 1).",
+            obj(
+                json!({"panel": panel(), "key": obj(json!({"frame": int("Frame within the panel"), "center": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "zoom": number("Zoom, 1 = full frame")}), &["frame", "center", "zoom"])}),
+                &["panel", "key"],
+            ),
+        ),
+        schema(
+            "remove_camera_key",
+            "Remove the camera key on a frame.",
+            obj(json!({"panel": panel(), "frame": int("Frame within the panel")}), &["panel", "frame"]),
+        ),
+        schema("clear_camera", "Remove every camera key of a panel.", obj(json!({"panel": panel()}), &["panel"])),
+        schema("add_layer", "Add a drawing layer on top.", obj(json!({"panel": panel(), "name": string("Layer name")}), &["panel", "name"])),
+        schema("delete_layer", "Delete a layer (a panel keeps at least one).", obj(json!({"panel": panel(), "layer": layer()}), &["panel", "layer"])),
+        schema(
+            "set_layer_visible",
+            "Show or hide a layer.",
+            obj(json!({"panel": panel(), "layer": layer(), "visible": boolean("Visible")}), &["panel", "layer", "visible"]),
+        ),
+        schema(
+            "set_layer_opacity",
+            "Set a layer's opacity (0–1).",
+            obj(json!({"panel": panel(), "layer": layer(), "opacity": number("Opacity 0–1")}), &["panel", "layer", "opacity"]),
+        ),
+        schema("import_fountain", "Append the scenes of a Fountain screenplay.", obj(json!({"text": string("Fountain text")}), &["text"])),
+        schema(
+            "import_script",
+            "Import a screenplay (Fountain, Final Draft .fdx, ScriptCraft scene list JSON). merge (default true) updates the board by scene id, keeping drawings; false appends.",
+            obj(
+                json!({"name": string("File name, used to detect the format"), "text": string("The file's text"), "format": {"type": "string", "enum": ["fountain", "final_draft", "scene_list"]}, "merge": boolean("Update by scene id (default true)")}),
+                &["text"],
+            ),
+        ),
+        schema(
+            "conform",
+            "Take panel timing from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML). reorder puts panels in the edit's order; mark_missing flags panels the edit leaves out.",
+            obj(
+                json!({"name": string("File name, used to detect the format"), "text": string("The timeline's text"), "reorder": boolean("Apply the edit's order (default false)"), "mark_missing": boolean("Flag panels not in the edit (default false)")}),
+                &["name", "text"],
+            ),
+        ),
+        schema(
+            "add_audio",
+            "Add a sound file to the audio track, at `start`, or at `panel`'s first frame anchored to it.",
+            obj(
+                json!({"path": string("Sound file path (WAV, AIFF, MP3, AAC/M4A, FLAC, Ogg, Opus)"), "name": string("Display name"), "start": int("Start frame"), "panel": id("Panel to anchor to")}),
+                &["path"],
+            ),
+        ),
+        schema(
+            "move_audio",
+            "Move a sound clip to start at a frame.",
+            obj(json!({"clip": id("Sound clip id"), "start": int("Start frame")}), &["clip", "start"]),
+        ),
+        schema("remove_audio", "Remove a sound clip.", obj(json!({"clip": id("Sound clip id")}), &["clip"])),
+        schema(
+            "set_audio_anchor",
+            "Anchor a sound clip to a panel (null frees it); anchored clips follow retiming.",
+            obj(json!({"clip": id("Sound clip id"), "panel": id("Panel id, or null")}), &["clip"]),
+        ),
+        schema(
+            "set_audio_gain",
+            "Set a sound clip's gain in dB.",
+            obj(json!({"clip": id("Sound clip id"), "gain_db": number("Gain in dB")}), &["clip", "gain_db"]),
+        ),
+        schema(
+            "set_audio_trim",
+            "Skip frames at the start of a sound clip's source.",
+            obj(json!({"clip": id("Sound clip id"), "trim_in": int("Frames to skip")}), &["clip", "trim_in"]),
+        ),
+        schema(
+            "fill",
+            "Bucket fill on a layer at canvas pixel x, y.",
+            obj(
+                json!({"panel": panel(), "layer": layer(), "x": int("Canvas x"), "y": int("Canvas y"), "color": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255}, "minItems": 4, "maxItems": 4, "description": "Straight RGBA"}, "tolerance": int("0–255"), "all_layers": boolean("Find the area on all visible layers"), "gap": int("Close gaps up to this many pixels")}),
+                &["panel", "layer", "x", "y", "color"],
+            ),
+        ),
+        schema(
+            "transform_selection",
+            "Move, scale and rotate the pixels inside a polygon (canvas pixels) about their centre.",
+            obj(
+                json!({"panel": panel(), "layer": layer(), "polygon": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "description": "Polygon corners [x, y]"}, "transform": {"type": "object", "description": "dx, dy (px), scale_x, scale_y, angle (degrees clockwise)"}}),
+                &["panel", "layer", "polygon", "transform"],
+            ),
+        ),
+        schema(
+            "clear_selection",
+            "Clear the pixels inside a polygon on a layer.",
+            obj(
+                json!({"panel": panel(), "layer": layer(), "polygon": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}, "description": "Polygon corners [x, y]"}}),
+                &["panel", "layer", "polygon"],
+            ),
+        ),
+    ]
+}
+
 /// Parse a command from JSON.
 pub fn parse(json: &str) -> Result<Command> {
     serde_json::from_str(json).map_err(|e| Error::Format(format!("command: {e}")))
@@ -547,6 +715,110 @@ mod tests {
         // A file with ntsc reads back.
         let back = crate::format::from_bytes(&crate::format::to_bytes(&p).unwrap()).unwrap();
         assert!(back.settings.ntsc);
+    }
+
+    /// One value of every command; the match makes a new variant fail to compile here until it has
+    /// a sample (and so a schema).
+    fn samples() -> Vec<Command> {
+        let p = Id(1);
+        let all = vec![
+            Command::AddScene { heading: "H".into() },
+            Command::AddPanel { scene: Some(p), after: Some(p) },
+            Command::DeletePanel { panel: p },
+            Command::DuplicatePanel { panel: p },
+            Command::SetCanvas { width: 64, height: 36 },
+            Command::SetFrameRate { fps: 24, ntsc: true, keep_time: false },
+            Command::MovePanel { panel: p, later: true },
+            Command::SetDuration { panel: p, frames: 3 },
+            Command::SetText { panel: p, field: TextField::Shot, text: "CU".into() },
+            Command::SetSceneHeading { scene: p, heading: "H".into() },
+            Command::SetCameraKey { panel: p, key: CameraKey::default() },
+            Command::RemoveCameraKey { panel: p, frame: 0 },
+            Command::ClearCamera { panel: p },
+            Command::AddLayer { panel: p, name: "L".into() },
+            Command::DeleteLayer { panel: p, layer: p },
+            Command::SetLayerVisible { panel: p, layer: p, visible: false },
+            Command::SetLayerOpacity { panel: p, layer: p, opacity: 0.5 },
+            Command::ImportFountain { text: "INT. A".into() },
+            Command::ImportScript { name: "a.fdx".into(), text: "x".into(), format: Some(ScriptFormat::FinalDraft), merge: false },
+            Command::Conform { name: "a.otio".into(), text: "{}".into(), reorder: true, mark_missing: true },
+            Command::AddAudio { path: "a.wav".into(), name: "A".into(), start: Some(1), panel: Some(p) },
+            Command::MoveAudio { clip: p, start: 2 },
+            Command::RemoveAudio { clip: p },
+            Command::SetAudioAnchor { clip: p, panel: Some(p) },
+            Command::SetAudioGain { clip: p, gain_db: -3.0 },
+            Command::SetAudioTrim { clip: p, trim_in: 4 },
+            Command::Fill { panel: p, layer: p, x: 1, y: 1, color: [0, 0, 0, 255], tolerance: 32, all_layers: false, gap: 0 },
+            Command::TransformSelection {
+                panel: p,
+                layer: p,
+                polygon: vec![[0.0, 0.0], [4.0, 0.0], [4.0, 4.0]],
+                transform: crate::select::Transform::default(),
+            },
+            Command::ClearSelection { panel: p, layer: p, polygon: vec![[0.0, 0.0], [4.0, 0.0], [4.0, 4.0]] },
+        ];
+        for c in &all {
+            match c {
+                Command::AddScene { .. }
+                | Command::AddPanel { .. }
+                | Command::DeletePanel { .. }
+                | Command::DuplicatePanel { .. }
+                | Command::SetCanvas { .. }
+                | Command::SetFrameRate { .. }
+                | Command::MovePanel { .. }
+                | Command::SetDuration { .. }
+                | Command::SetText { .. }
+                | Command::SetSceneHeading { .. }
+                | Command::SetCameraKey { .. }
+                | Command::RemoveCameraKey { .. }
+                | Command::ClearCamera { .. }
+                | Command::AddLayer { .. }
+                | Command::DeleteLayer { .. }
+                | Command::SetLayerVisible { .. }
+                | Command::SetLayerOpacity { .. }
+                | Command::ImportFountain { .. }
+                | Command::ImportScript { .. }
+                | Command::Conform { .. }
+                | Command::AddAudio { .. }
+                | Command::MoveAudio { .. }
+                | Command::RemoveAudio { .. }
+                | Command::SetAudioAnchor { .. }
+                | Command::SetAudioGain { .. }
+                | Command::SetAudioTrim { .. }
+                | Command::Fill { .. }
+                | Command::TransformSelection { .. }
+                | Command::ClearSelection { .. } => {}
+            }
+        }
+        all
+    }
+
+    #[test]
+    fn every_command_has_a_schema_that_fits_it() {
+        let schemas = schemas();
+        let samples = samples();
+        assert_eq!(schemas.len(), samples.len());
+        for (schema, sample) in schemas.iter().zip(&samples) {
+            let mut v = serde_json::to_value(sample).unwrap();
+            assert_eq!(v["cmd"], schema.name, "schemas follow the enum order");
+            let obj = v.as_object_mut().unwrap();
+            obj.remove("cmd");
+            let props = schema.fields["properties"].as_object().unwrap();
+            for k in obj.keys() {
+                assert!(props.contains_key(k), "{}: `{k}` missing from the schema", schema.name);
+            }
+            for r in schema.fields["required"].as_array().unwrap() {
+                assert!(obj.contains_key(r.as_str().unwrap()), "{}: required `{r}` is no field", schema.name);
+            }
+            // The required fields alone parse.
+            let mut minimal = serde_json::Map::new();
+            minimal.insert("cmd".into(), schema.name.into());
+            for r in schema.fields["required"].as_array().unwrap() {
+                let k = r.as_str().unwrap();
+                minimal.insert(k.into(), obj[k].clone());
+            }
+            assert!(serde_json::from_value::<Command>(serde_json::Value::Object(minimal)).is_ok(), "{}", schema.name);
+        }
     }
 
     #[test]

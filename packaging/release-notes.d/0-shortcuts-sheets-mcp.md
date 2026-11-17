@@ -1,0 +1,1 @@
+- Change any keyboard shortcut in Edit ▸ Keyboard Shortcuts…; board sheets let you choose the fields, a header line and ruled note lines; conforming to an edit can also take its panel order and mark panels it leaves out; and `boardcraft-cli mcp` lets AI agents work on a board.

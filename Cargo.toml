@@ -27,6 +27,8 @@ craft-settings = { git = "https://github.com/storytold/craft-libs", rev = "0649a
 craft-audio = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0", features = ["decode", "aac-encode", "peaks"] }
 craft-media = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0", features = ["isobmff"] }
 craft-video = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0", features = ["h264-encode"] }
+craft-keymap = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0" }
+craft-mcp-server = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0" }
 craft-zip = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0" }
 
 # foundation

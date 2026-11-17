@@ -107,13 +107,34 @@ same `<name>_stills/` folder as `sound_<clip id>.<ext>` and referenced by absolu
 - Conform reads only the video events and tracks, so sound never counts as an unknown clip.
 
 ## In: conform timing from an edit
+## In: conform from an edit
 
 When the editor retimes the animatic, File ▸ Conform Timing from Edit (`boardcraft-cli conform`,
 command `conform`) reads the edited timeline in any of the four formats and sets each panel's
 duration to its clip's, rounded to whole frames at the board's rate. Clips are matched by the panel
 id in OTIO metadata, then by the clip name `Panel 1.2`, then by the still's file name. The report
-lists clips that are not from this board and panels the edit no longer uses; panel order and
-deleted panels are reported, not applied.
+lists clips that are not from this board and panels the edit no longer uses.
+
+By default conform only retimes. Two options take more from the edit; the app shows a summary of
+what would change (worked out on a copy of the board) and applies nothing until Apply, as one undo
+step:
+
+- **Put panels in the edit's order** (`reorder`). A panel used more than once counts where it is
+  first used. Scenes stay whole:
+  1. A panel the edit cuts in between two panels of another scene (the used clips just before and
+     after it both belong to that scene) moves into that scene; otherwise it stays in its scene.
+  2. Inside each scene, the panels the edit uses follow the edit's order.
+  3. A panel the edit does not use stays in its scene, right after the panel that came before it
+     on the board (first, when it was first).
+  4. Scenes follow the edit order of their first used panel; a scene the edit does not use keeps its
+     place after the scene before it. A scene left without panels by rule 1 is removed (its panels
+     live on in the other scene).
+- **Mark panels the edit leaves out** (`mark_missing`). Nothing is deleted: each such panel gets the
+  first notes line `[not in the edit]` (in the inspector, and on sheets that print notes). A later
+  conform in which the edit uses the panel again removes the line; marking twice adds nothing.
+
+Tests (`crates/core/src/timeline.rs`) cut a three-scene board in a new order, with one panel
+moved into another scene and one left out, in each of the four formats, and check the result.
 
 ## Out: movie (MP4)
 
