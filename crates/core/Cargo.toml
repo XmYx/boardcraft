@@ -22,7 +22,13 @@ craft-timeline = { workspace = true }
 craft-xml = { workspace = true }
 craft-pdf = { workspace = true }
 skrifa = { workspace = true }
+# The audio track (decode, waveform overview, AAC for movies) and movie export (H.264 in MP4).
+craft-audio = { workspace = true }
+craft-media = { workspace = true }
+craft-video = { workspace = true }
 
 [dev-dependencies]
 # A real font for the board-sheet tests.
 epaint_default_fonts = { workspace = true }
+# Decode exported movies back in the tests.
+craft-video = { workspace = true, features = ["h264-decode"] }

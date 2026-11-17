@@ -2,70 +2,62 @@
 # Columns: in-shared-catalog <TAB> source text. `shared` = already in craft-i18n common.tsv.
 app	+ Layer
 app	+ Panel
-app	1 is linear. Lower: a light touch already draws thick. Higher: press harder for thick lines.
 app	= {seconds} s at {fps} fps
+app	A movie export is already running
 app	A panel keeps at least one layer
 app	A4, 3 panels a page…
 app	A4, 6 panels a page…
 app	AI panel sketch
 app	AI sketch
 app	Action
-app	All visible layers
-app	Angle
+app	Add a sound file at the selected panel; it moves with the panel when you retime
+app	Added the sound {name}
+app	Added the sound {name} at panel {label}; it moves with the panel
+app	An MP4 (H.264 video, AAC sound) of the animatic with its camera moves and sound track.
+app	Anchor to Panel {label}
 app	Animatic timeline
 app	Apply
-app	Apply Transform
-app	Apply the transform (Enter)
 app	Aspect ratio
+app	Audio
 app	Autosave failed: {error}
 app	Board
 app	Board (panel grid)
 app	Board Settings
 app	Board Settings…
 app	Board is {w}×{h} at {fps} fps
+app	Board size ({w}×{h})
 app	BoardCraft closed before these boards were saved. Recover them?
 app	BoardCraft project
 app	Boarded {scenes} scenes from {file}
 app	Boarded {scenes} scenes, {n} panels from {file}
 app	Brush
+app	Burn-ins: panel number, timecode and dialogue
 app	CAM
 app	Camera
 app	Camera moves
 app	Cancel
-app	Cancel Selection
+app	Cancel Export
 app	Clear
-app	Click inside the canvas to fill
-app	Close gaps (px)
 app	Colour
 app	Conform Timing from Edit…
 app	Conformed timing from {file}: {summary}
-app	Copied the selection
-app	Copy
-app	Copy Selection
 app	Could not import {file}: {error}
 app	Could not open: {error}
 app	Could not read {file}: {error}
 app	Could not recover: {error}
-app	Could not save preferences: {error}
 app	Could not write {file}: {error}
-app	Cut
-app	Cut Selection
-app	Cut the selection
 app	Decide Later
 app	Delete
 app	Delete Panel
-app	Delete Selection
 app	Delete key {f}
 app	Delete the camera key at frame {f}
 app	Demo board: Paper Boats
 app	Dialogue
 app	Discard {name}
 app	Don't Save
-app	Drag on the canvas to select.
 app	Drag to frame the shot, scroll to zoom (C)
 app	Draw (B)
 app	Drawings keep their size: the frame grows or crops around the centre.
-app	Drop the selection (Esc)
 app	Duplicate Panel
 app	Duration
 app	Edit
@@ -77,55 +69,60 @@ app	Erase (E)
 app	Eraser
 app	Export Animatic Timeline
 app	Export Board Sheet (PDF)
+app	Export Movie
+app	Export Movie (MP4)…
 app	Export Panel Images (PNG)…
 app	Export Shot List (CSV)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
+app	Exporting the movie {file}…
+app	Export…
 app	File
-app	Fill
-app	Fill an area with the colour (G)
-app	Filled
 app	Fit Canvas (0)
 app	Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings.
 app	Frame
 app	Frame rate
+app	Gain
 app	Generate a sketch for this panel with the shared Craft AI tools (not connected yet)
 app	Go to start
+app	Half size ({w}×{h})
 app	Hardness
 app	Heading
 app	Height
 app	Image
 app	Images
+app	Import Audio…
 app	Import Image to Panel…
 app	Import Image…
 app	Import Screenplay…
 app	Imported {file}
 app	Keep panel lengths in seconds
 app	Keep the autosaves and ask again next time
+app	Keep the sound where it is when panels are retimed
 app	Key at end
 app	Key at start
 app	Language
-app	Lasso
 app	Layer
 app	Layers
+app	Length {seconds} s
 app	Letter, 3 panels a page…
 app	Letter, 6 panels a page…
-app	Line size at the lightest touch
-app	Minimum size (%)
 app	Move Down
 app	Move Earlier
 app	Move Later
 app	Move Panel Earlier
 app	Move Panel Later
 app	Move Up
+app	Moves with panel {label}
+app	Movie export cancelled
+app	Movie {percent}%
 app	New Board…
 app	New Panel
 app	New Scene
 app	New panel at the end of this scene
 app	No panel selected.
+app	No sound yet. Import Audio adds a clip at the selected panel.
 app	Notes
-app	Nothing selected
-app	Nothing to paste
 app	Onion Skin (O)
 app	Open this layer in your image editor; BoardCraft reloads it when you save there
 app	Opened {file}
@@ -136,31 +133,22 @@ app	Panel (draw and camera)
 app	Panel canvas
 app	Panel {label}
 app	Panel {label} on the timeline
-app	Paste
-app	Paste Selection
-app	Pasted. Drag, use the arrow keys or type values to place it; Enter applies, Esc cancels.
 app	Pause
 app	Pause Animatic
-app	Pen Settings
 app	Play
 app	Play Animatic
 app	Play the animatic (Space)
-app	Pressure curve
-app	Pressure curve preview: the lightest touch draws {light}% of full size, half pressure {half}%
+app	Playing without sound: {error}
 app	Pressure: opacity
 app	Pressure: size
 app	Quit
 app	Recover unsaved work
 app	Recover {name}
 app	Recovered unsaved work. Save it to keep it.
-app	Rectangle select
 app	Redo
 app	Redone
-app	Reset Pen Settings
-app	Reset View Rotation
+app	Remove Sound
 app	Reset camera
-app	Rotate View Left
-app	Rotate View Right
 app	Save
 app	Save As…
 app	Save failed: {error}
@@ -169,37 +157,28 @@ app	Saved {file}
 app	Scene
 app	Scene {number}
 app	Screenplay
-app	Select All
-app	Select a freehand area of the layer (L)
 app	Select a panel first
 app	Select a panel.
-app	Select a rectangle of the layer (M)
-app	Select a visible layer first
 app	Select a visible layer to draw on
-app	Select a visible layer to fill on
-app	Select the whole layer (Ctrl+A)
-app	Selected {w} × {h} px. Drag, use the arrow keys or type values to move it; Enter applies, Esc cancels.
-app	Selection applied
-app	Selection cancelled
-app	Selection deleted
 app	Set the frame to {ratio}, keeping its width
 app	Shot
 app	Shot presets
 app	Size
-app	Smooths strokes: 0 is off, 10 is strongest (the line trails the pen)
-app	Stabilizer
+app	Sound
+app	Sound left out: {list}
+app	Sound {name} at {seconds} s
 app	Start
+app	Start at Playhead
 app	Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view.
+app	Stays at its time when panels are retimed
 app	System
 app	Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
-app	The clipboard image is too large
-app	This layer
+app	The movie export stopped unexpectedly
 app	Timeline
 app	Timing
 app	To Start
-app	Tolerance
-app	Transform reset
-app	Turn the view (Shift+[ and Shift+], or hold R and drag); Shift+0 resets. Drawings are not changed.
+app	Trim start
+app	Unanchor
 app	Undo
 app	Undone
 app	Unsaved changes
@@ -207,24 +186,18 @@ app	Untitled board
 app	Updated the board from {file}: {summary}
 app	Updated the layer from {file}
 app	View
-app	View rotated to {angle}°
-app	View rotation
-app	View rotation reset
 app	Width
 app	Wrote the board sheet {file} ({n} pages)
+app	Wrote the movie {file} ({w}×{h}, {n} frames)
 app	Wrote the shot list {file}
 app	Wrote {file}; open it in your image editor ({error})
 app	Wrote {n} panel images to {dir}
-app	X
-app	Y
 app	Zoom
 app	camera move
 app	frame {f}
 app	s
 app	static camera
 app	zoom
-app	{canvas}, view rotated {angle}°
-app	{canvas}, {selection}
 app	{format}…
 app	{layer} opacity
 app	{layer} options

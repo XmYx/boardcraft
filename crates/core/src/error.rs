@@ -24,6 +24,15 @@ pub enum Error {
     /// A feature that is not available in this build.
     #[error("not supported yet: {0}")]
     Unsupported(String),
+    /// A sound file could not be decoded or encoded.
+    #[error("audio: {0}")]
+    Audio(String),
+    /// A movie could not be encoded.
+    #[error("video: {0}")]
+    Video(String),
+    /// The user cancelled a long operation.
+    #[error("cancelled")]
+    Cancelled,
     /// A reference (scene, panel, layer) that does not exist.
     #[error("not found: {0}")]
     NotFound(String),

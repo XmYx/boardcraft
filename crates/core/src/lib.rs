@@ -9,6 +9,8 @@
 //! - [`pen`]: pen pressure curve and the stroke stabilizer.
 //! - [`select`]: lasso and rectangle selections; move, scale and rotate selected pixels.
 //! - [`fill`]: bucket fill with tolerance and gap closing.
+//! - [`audio`]: the sound clips under the animatic: decoding (craft-audio), waveforms, mixing, and
+//!   clips anchored to panels that follow them when the board is retimed.
 //! - [`camera`]: camera keyframes and the eased pan/zoom between them.
 //! - [`fountain`]: Fountain screenplay import (scene headings, action, dialogue), the hand-off from
 //!   ScriptCraft.
@@ -19,6 +21,8 @@
 //! - [`command`]: every edit as a serializable command (app, CLI and tests share them).
 //! - [`timeline`]: the animatic as an editorial timeline (OTIO, CMX 3600 EDL, FCP7 XML, FCPXML) through
 //!   craft-timeline, and conform (timing back from an edit).
+//! - [`movie`]: the animatic as an H.264/AAC MP4 with burn-ins (panel, timecode, dialogue).
+//! - [`text`]: a small glyph rasterizer (skrifa outlines) for the burn-ins.
 //! - [`sheet`]: printable board sheets (PDF) through craft-pdf.
 //! - [`shotlist`]: the shot list as CSV.
 //! - [`ai`]: a stubbed hook for generating panel drawings through the shared Craft AI layer.
@@ -29,6 +33,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
 pub mod ai;
+pub mod audio;
 pub mod camera;
 pub mod command;
 pub mod demo;
@@ -37,6 +42,7 @@ pub mod fill;
 pub mod format;
 pub mod fountain;
 pub mod model;
+pub mod movie;
 pub mod pen;
 pub mod raster;
 pub mod script;
@@ -44,6 +50,7 @@ pub mod select;
 pub mod sheet;
 pub mod shotlist;
 pub mod stills;
+pub mod text;
 pub mod timeline;
 
 pub use camera::{Camera, CameraKey, ViewRect};

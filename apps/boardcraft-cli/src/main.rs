@@ -8,6 +8,7 @@
 //! boardcraft-cli export <board.boardcraft> <out.otio|.edl|.xml|.fcpxml>
 //! boardcraft-cli conform <board.boardcraft> <edit.otio|.edl|.xml|.fcpxml>
 //! boardcraft-cli export-png <board.boardcraft> <dir>
+//! boardcraft-cli export-movie <board.boardcraft> <out.mp4> [--no-burn-in] [--half]
 //! boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
 //! boardcraft-cli commands                                # list command names
 //! ```
@@ -20,7 +21,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use boardcraft_core::{command, demo, format, fountain, sheet, stills, timeline};
+use boardcraft_core::{command, demo, format, fountain, movie, sheet, stills, timeline};
 use serde_json::json;
 
 const USAGE: &str = "usage:
@@ -33,6 +34,7 @@ const USAGE: &str = "usage:
   boardcraft-cli export-png <board.boardcraft> <dir>
   boardcraft-cli export-sheet <board.boardcraft> <out.pdf> [--paper a4|letter] [--grid <cols>x<rows>]
   boardcraft-cli export-shotlist <board.boardcraft> <out.csv>
+  boardcraft-cli export-movie <board.boardcraft> <out.mp4> [--no-burn-in] [--half]
   boardcraft-cli commands
   boardcraft-cli --version";
 
@@ -57,6 +59,12 @@ const COMMANDS: &[&str] = &[
     "duplicate_panel",
     "set_canvas",
     "set_frame_rate",
+    "add_audio",
+    "move_audio",
+    "remove_audio",
+    "set_audio_anchor",
+    "set_audio_gain",
+    "set_audio_trim",
 ];
 
 enum Fail {
@@ -85,7 +93,18 @@ fn info(path: &Path) -> Result<String, Fail> {
             })
         })
         .collect();
-    let v = json!({"name": p.name, "settings": p.settings, "total_frames": p.total_frames(), "scenes": scenes});
+    let audio: Vec<_> = p
+        .audio
+        .iter()
+        .map(|c| {
+            json!({
+                "id": c.id.0, "name": c.name, "file": c.entry_name(), "start": c.start, "trim_in": c.trim_in,
+                "frames": c.length_frames(p.settings.fps_f64()), "gain_db": c.gain_db, "anchor": c.anchor,
+                "sample_rate": c.sample_rate, "channels": c.channels,
+            })
+        })
+        .collect();
+    let v = json!({"name": p.name, "settings": p.settings, "total_frames": p.total_frames(), "scenes": scenes, "audio": audio});
     serde_json::to_string_pretty(&v).map_err(op)
 }
 
@@ -167,6 +186,25 @@ fn run(args: &[String]) -> Result<String, Fail> {
             let out = Path::new(arg(2)?);
             format::write_atomic(out, boardcraft_core::shotlist::csv(&project).as_bytes()).map_err(op)?;
             Ok(format!("wrote {} ({} shots)", out.display(), project.panel_count()))
+        }
+        "export-movie" => {
+            let project = format::load(Path::new(arg(1)?)).map_err(op)?;
+            let out = Path::new(arg(2)?);
+            let mut opts = movie::MovieOptions::default();
+            for a in args.iter().skip(3) {
+                match a.as_str() {
+                    "--no-burn-in" => opts.burn_in = false,
+                    "--half" => opts.size = movie::MovieSize::Half,
+                    _ => return Err(Fail::Usage(format!("unknown option {a}\n{USAGE}"))),
+                }
+            }
+            let r = movie::write_movie(&project, out, &opts, epaint_default_fonts::UBUNTU_LIGHT, 0, &mut |_, _| true).map_err(op)?;
+            let mut text =
+                format!("wrote {} ({}×{}, {} frames, {})", out.display(), r.width, r.height, r.frames, if r.audio { "with sound" } else { "no sound" });
+            for e in &r.audio_errors {
+                text.push_str(&format!("\nsound left out: {e}"));
+            }
+            Ok(text)
         }
         "export-sheet" => {
             let project = format::load(Path::new(arg(1)?)).map_err(op)?;
@@ -252,6 +290,18 @@ mod tests {
         assert!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--paper", "letter", "--grid", "2x2"])).is_ok());
         assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
         assert!(matches!(run(&s(&["export-sheet", b, pdf.to_str().unwrap(), "--grid", "x"])), Err(Fail::Usage(_))));
+        // Sound and a movie.
+        let wav = dir.join("line.wav");
+        std::fs::write(&wav, boardcraft_core::audio::tone_wav(440.0, 0.5, 16_000, 1)).unwrap();
+        let cmd = format!(r#"{{"cmd":"add_audio","path":{:?}}}"#, wav.to_str().unwrap());
+        assert!(run(&s(&["exec", b, &cmd])).is_ok());
+        let summary: serde_json::Value = serde_json::from_str(&super::info(&board).ok().unwrap()).unwrap();
+        assert_eq!(summary["audio"][0]["name"], "line");
+        let mp4 = dir.join("a.mp4");
+        let out = run(&s(&["export-movie", b, mp4.to_str().unwrap(), "--half", "--no-burn-in"])).ok().unwrap();
+        assert!(out.contains("with sound"), "{out}");
+        assert_eq!(&std::fs::read(&mp4).unwrap()[4..8], b"ftyp");
+        assert!(matches!(run(&s(&["export-movie", b, mp4.to_str().unwrap(), "--nope"])), Err(Fail::Usage(_))));
         assert!(matches!(run(&s(&["bogus"])), Err(Fail::Usage(_))));
         assert!(matches!(run(&s(&[])), Err(Fail::Usage(_))));
         std::fs::remove_dir_all(&dir).ok();

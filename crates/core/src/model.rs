@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::audio::AudioClip;
 use crate::camera::Camera;
 use crate::raster::{MAX_SIDE, Raster};
 
@@ -174,6 +175,9 @@ pub struct Project {
     pub settings: Settings,
     #[serde(default)]
     pub scenes: Vec<Scene>,
+    /// The sound clips under the animatic (see [`crate::audio`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub audio: Vec<AudioClip>,
     /// Next id to hand out.
     pub next_id: u64,
 }
@@ -194,7 +198,7 @@ pub struct PanelPos {
 impl Project {
     /// An empty project.
     pub fn new(name: &str) -> Self {
-        Self { name: name.to_string(), settings: Settings::default(), scenes: Vec::new(), next_id: 1 }
+        Self { name: name.to_string(), settings: Settings::default(), scenes: Vec::new(), audio: Vec::new(), next_id: 1 }
     }
 
     /// A project with one scene and one blank panel, ready to draw.
@@ -424,6 +428,17 @@ impl Project {
                 p.camera.normalize();
             }
         }
+        // Sound keeps its time in seconds either way.
+        let scale = |v: u64| (v as f64 * k).round() as u64;
+        for c in &mut self.audio {
+            c.start = scale(c.start);
+            c.trim_in = scale(c.trim_in);
+            if let Some(a) = &mut c.anchor {
+                a.offset = (a.offset as f64 * k).round() as i64;
+            }
+            c.sanitize();
+        }
+        self.sync_audio();
         Ok(())
     }
 
@@ -443,6 +458,9 @@ impl Project {
                     collect(l.id);
                 }
             }
+        }
+        for c in &self.audio {
+            collect(c.id);
         }
         self.next_id = self.next_id.max(max.saturating_add(1));
         let (w, h) = (self.settings.width, self.settings.height);
@@ -474,7 +492,13 @@ impl Project {
                 }
             }
         }
+        self.audio.truncate(crate::audio::MAX_CLIPS);
+        for c in &mut self.audio {
+            renumber(&mut c.id);
+            c.sanitize();
+        }
         self.next_id = fresh;
+        self.sync_audio();
     }
 }
 

@@ -15,12 +15,15 @@
 mod i18n;
 mod app;
 mod args;
+mod audio_out;
+mod audio_ui;
 mod autosave;
 mod board;
 mod canvas;
 mod external;
 mod history;
 mod inspector;
+mod movie_ui;
 mod settings;
 mod textures;
 mod timeline;

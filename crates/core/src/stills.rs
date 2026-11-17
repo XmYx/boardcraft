@@ -16,7 +16,12 @@ pub fn still_name(scene_index: usize, panel_index: usize) -> String {
 /// Render what the camera sees at `frame` of `panel` at the project resolution.
 pub fn render_frame(project: &Project, panel: &Panel, frame: f32) -> Raster {
     let composite = panel.composite(&project.settings);
-    composite.render_view(panel.camera.view(frame), project.settings.width, project.settings.height)
+    render_frame_from(&composite, panel, frame, project.settings.width, project.settings.height)
+}
+
+/// [`render_frame`] from a panel's [`Panel::composite`] made once, at any output size (movies).
+pub fn render_frame_from(composite: &Raster, panel: &Panel, frame: f32, width: u32, height: u32) -> Raster {
+    composite.render_view(panel.camera.view(frame), width, height)
 }
 
 /// `file://` URL of an absolute path, percent-encoding everything outside the RFC 3986 unreserved

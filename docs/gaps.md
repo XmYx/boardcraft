@@ -12,6 +12,10 @@ working storyboard artist (from [user-research.md](user-research.md) and the
 | 2 | Movie export (MP4/MOV) with burn-ins: panel number, dialogue, timecode | Export | yes | 24 | A8, R4 |
 | 3 | Pen tablet tuning: ~~pressure curve, stabilizer~~ (done); per-OS tablet tests remain | Drawing | yes | 6 | A1 |
 | 4 | ~~Lasso select / move / transform, canvas rotation, fill~~ (done); anti-aliased selection edges, free-distort handles remain | Drawing | no | 6 | R6 |
+| 1 | ~~Audio track under the animatic~~ done: import, waveform, mix, anchors keep sync on retime; left: scrub audio, recording, per-clip fades | Playback | yes | 6 | [user-research](user-research.md) A5, R2 |
+| 2 | ~~Movie export with burn-ins~~ done: MP4 (H.264/AAC), panel number, timecode, dialogue; left: MOV/ProRes, burn-in layout options | Export | yes | 4 | A8, R4 |
+| 3 | Pen tablet tuning: pressure curve, per-OS tests, stabilizer | Drawing | yes | 16 | A1 |
+| 4 | Lasso select / move / transform, canvas rotation, fill | Drawing | yes | 30 | R6 |
 | 5 | Remappable shortcuts (craft-keymap) and a shortcut sheet | UX | yes | 10 | A15, R11 |
 | 6 | Board-sheet options in the app: fields, header text, notes lines | Printing | yes | 8 | A10, R5 |
 | 7 | Camera rotation and a multi-key camera editor on the timeline | Camera | no | 16 | R1 |
@@ -24,13 +28,16 @@ working storyboard artist (from [user-research.md](user-research.md) and the
 | 14 | Large boards: tiled layers, textures for visible panels only, incremental autosave | Performance | yes | 16 | [architecture](architecture.md) |
 | 15 | Conform applies order and deletions from the edit (timing is applied today) | Interchange | no | 6 | [interop](interop.md) |
 
-### Audio track
-The most requested missing feature. Needs decoding (craft-audio in craft-libs), an output stream,
-a waveform strip under the timeline and sync rules when panels are retimed.
+### Audio track (done)
+Clips decode through craft-audio, play through cpal, show a waveform strip under the timeline and
+follow their anchor panel when the board is retimed. Left: audio scrubbing while dragging the
+playhead, recording from a microphone, fades, and decoding on a background thread (long files
+decode on the UI thread the first time they are drawn).
 
-### Movie export
-Needs a video encoder; craft-libs has no encoder yet (FilmCraft has one). Until then the OTIO/EDL/XML
-export plus FilmCraft covers it.
+### Movie export (done)
+H.264 (craft-video) and AAC (craft-audio) in MP4 (craft-media), with burn-ins. Left: MOV/ProRes
+for editorial, a choice of burn-in fields and positions, and streaming large movies to disk (the
+file is built in memory so its index can go first).
 
 ### Large boards
 Every layer is a full-canvas RGBA buffer (3.7 MB at 1280×720); undo and autosave share unchanged

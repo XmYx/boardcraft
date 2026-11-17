@@ -1,5 +1,6 @@
 //! Timeline strip: panels as blocks sized by duration, scene bands, playhead, transport.
-//! Drag a block's right edge to change the panel's duration.
+//! Drag a block's right edge to change the panel's duration. Sound clips sit in a waveform strip
+//! under the blocks (`audio_ui`).
 
 use boardcraft_core::Id;
 
@@ -41,6 +42,8 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let playhead = app.playhead;
     let project = &app.project;
     let textures = &mut app.textures;
+    let audio = &mut app.audio;
+    let mut sound = Vec::new();
     egui::ScrollArea::horizontal().auto_shrink([false, true]).show(ui, |ui| {
         let width = (total as f32 * ppf + 40.0).max(ui.available_width());
         let (rect, bg) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click_and_drag());
@@ -49,7 +52,8 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
         let band = 14.0;
         let block_top = rect.top() + band + 2.0;
-        let block_h = rect.height() - band - 4.0;
+        let strip_h = if project.audio.is_empty() { 0.0 } else { crate::audio_ui::STRIP_HEIGHT };
+        let block_h = rect.height() - band - 4.0 - strip_h;
         let mut x = rect.left();
         for (si, scene) in project.scenes.iter().enumerate() {
             let scene_x = x;
@@ -118,6 +122,10 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                 egui::Color32::WHITE,
             );
         }
+        if strip_h > 0.0 {
+            let strip = egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - strip_h), rect.right_bottom());
+            sound = crate::audio_ui::strip(ui, strip, project, ppf, audio);
+        }
         let px = rect.left() + playhead as f32 * ppf;
         painter.line_segment([egui::pos2(px, rect.top()), egui::pos2(px, rect.bottom())], egui::Stroke::new(2.0, egui::Color32::from_rgb(230, 60, 50)));
         if (bg.clicked() || bg.dragged())
@@ -130,6 +138,14 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         && app.project.panel(id).is_some_and(|p| p.duration != frames)
     {
         app.run(boardcraft_core::command::Command::SetDuration { panel: id, frames });
+    }
+    for a in sound {
+        match a {
+            crate::audio_ui::StripAction::Select(id) => app.audio.selected = Some(id),
+            crate::audio_ui::StripAction::Move(id, start) => {
+                app.run(boardcraft_core::command::Command::MoveAudio { clip: id, start });
+            }
+        }
     }
     if block_focused {
         let (l, r) = ui.input(|i| (i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight)));

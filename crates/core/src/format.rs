@@ -7,6 +7,7 @@
 //! | `mimetype` | `application/vnd.storytold.boardcraft+zip`, stored, first |
 //! | `project.json` | the envelope below, UTF-8 JSON |
 //! | `layers/<layer id>.png` | one RGBA PNG per layer that has paint; missing = transparent |
+//! | `audio/<clip id>.<ext>` | the source file of each sound clip, unchanged |
 //! | `thumbnail.png` | the first panel at 320 px wide, for file browsers (not read back) |
 //!
 //! ```json
@@ -86,6 +87,18 @@ pub fn to_bytes(project: &Project) -> Result<Vec<u8>> {
             w.add(&layer_entry(layer.id), &layer.pixels.to_png()?, craft_zip::Compression::Stored).map_err(zip_err)?;
         }
     }
+    for clip in &project.audio {
+        if clip.data.is_empty() {
+            continue;
+        }
+        // Uncompressed PCM deflates; coded audio does not.
+        let how = if matches!(clip.ext.as_str(), "wav" | "wave" | "aif" | "aiff" | "aifc") {
+            craft_zip::Compression::Deflated
+        } else {
+            craft_zip::Compression::Stored
+        };
+        w.add(&clip.entry_name(), &clip.data, how).map_err(zip_err)?;
+    }
     if let Some((_, first)) = project.panels().next() {
         let thumb = first.composite(&project.settings);
         let h = (320.0 * thumb.height() as f32 / thumb.width().max(1) as f32).round().max(1.0) as u32;
@@ -125,6 +138,16 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Project> {
             layer.pixels = raster;
         }
     }
+    // Sound clips: the source from the archive; a clip whose file is missing is dropped.
+    let mut audio = std::mem::take(&mut project.audio);
+    for clip in &mut audio {
+        clip.sanitize();
+        if let Some(bytes) = zip.read(&clip.entry_name(), crate::audio::MAX_AUDIO_BYTES).map_err(zip_err)? {
+            clip.data = std::sync::Arc::new(bytes);
+        }
+    }
+    audio.retain(|c| !c.data.is_empty());
+    project.audio = audio;
     project.repair();
     Ok(project)
 }
@@ -172,6 +195,23 @@ mod tests {
         let p = sample();
         let back = from_bytes(&to_bytes(&p).unwrap()).unwrap();
         assert_eq!(back, p);
+    }
+
+    #[test]
+    fn sound_round_trips() {
+        let mut p = sample();
+        let first = p.scenes[0].panels[0].id;
+        let wav = crate::audio::tone_wav(440.0, 0.2, 8_000, 1);
+        let id = p.add_audio("Line", "wav", wav.clone(), 5).unwrap();
+        p.set_audio_anchor(id, Some(first)).unwrap();
+        let bytes = to_bytes(&p).unwrap();
+        let back = from_bytes(&bytes).unwrap();
+        assert_eq!(back, p);
+        assert_eq!(back.audio[0].data.as_slice(), wav.as_slice());
+        // A clip whose file is missing from the archive is dropped, not an error.
+        let mut no_file = p.clone();
+        no_file.audio[0].data = Default::default();
+        assert!(from_bytes(&to_bytes(&no_file).unwrap()).unwrap().audio.is_empty());
     }
 
     #[test]

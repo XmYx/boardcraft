@@ -4,7 +4,7 @@
 
 | Crate | Path | What | Depends on UI? |
 |---|---|---|---|
-| `boardcraft-core` | `crates/core` | document model, brush, camera, `.boardcraft` format, screenplay import and re-import (`script`, `fountain`), timeline export and conform (`timeline`), stills, AI hook, demo board | no (`cargo xtask layers`) |
+| `boardcraft-core` | `crates/core` | document model, brush, camera, `.boardcraft` format, screenplay import and re-import (`script`, `fountain`), timeline export and conform (`timeline`), stills, audio track (`audio`), movie export (`movie`, `text`), AI hook, demo board | no (`cargo xtask layers`) |
 | `boardcraft` | `apps/boardcraft` | the egui desktop app | yes (egui/eframe 0.37, rfd) |
 | `boardcraft-cli` | `apps/boardcraft-cli` | headless commands, info, export | no |
 | `xtask` | `xtask` | `cargo xtask ci`, `layers`, `assets`, `licenses`, `progress`, `version`, `strings` | no |
@@ -13,7 +13,9 @@ Shared libraries from [storytold/craft-libs](https://github.com/storytold/craft-
 commit in the root `Cargo.toml`: `craft-zip` (container), `craft-image-codecs` (PNG/JPEG/…
 decode, PNG encode), `craft-atomic` (crash-safe saves), `craft-i18n` (interface language),
 `craft-fonts-build` (optional craft-fonts faces), `craft-timeline` (OTIO, EDL, FCP7 XML and FCPXML
-read and write through one neutral model), `craft-xml` (Final Draft), `craft-pdf` (board sheets; its patched Krilla is pinned in
+read and write through one neutral model), `craft-audio` (sound decoding, waveform overviews, the AAC
+encoder), `craft-video` (the H.264 encoder; its decoder in tests), `craft-media` (MP4 writer and
+reader), `craft-xml` (Final Draft), `craft-pdf` (board sheets; its patched Krilla is pinned in
 `[patch.crates-io]` as DeckCraft does), `craft-ai-core` (AI role
 declaration), `craft-settings` (the user's pen preferences in `config.toml`).
 
@@ -37,7 +39,8 @@ Drawing strokes and in-place text editing write the model directly (pixel undo c
 ## Data model (`boardcraft-core::model`)
 
 ```
-Project { name, settings { width, height, fps }, scenes, next_id }
+Project { name, settings { width, height, fps }, scenes, audio, next_id }
+  AudioClip { id, name, ext, start, trim_in, gain_db, anchor { panel, offset }?, data* }
   Scene { id, number, heading, source_scene_id, panels }
     Panel { id, duration (frames), dialogue, action, notes, layers, camera, revision* }
       Layer { id, name, visible, opacity, pixels* }      * = not serialized as JSON
@@ -70,6 +73,19 @@ A key frames a rectangle with the canvas aspect: centre (normalized) and zoom (1
 Between keys position eases with smoothstep and zoom interpolates geometrically; keys are clamped so
 the frame never leaves the canvas.
 
+## Audio (`audio`) and movies (`movie`, `text`)
+
+Sound clips keep their source file's bytes (shared, so undo snapshots stay cheap) and are decoded
+with craft-audio when needed. `Mixer` resamples (linear) and sums the clips at any output rate;
+`Waveform` wraps craft-audio's peaks pyramid. `Project::sync_audio` runs after every command (and
+every app edit) and moves anchored clips to their panel's start.
+
+A movie is rendered frame by frame (`stills::render_frame_from` on each panel's composite, made
+once), burn-ins drawn by `text` (skrifa outlines flattened and filled at 4×4 supersampling),
+converted to BT.709 4:2:0 and encoded by craft-video's H.264 encoder (no B-frames); the sound is
+mixed at 48 kHz and AAC-encoded between video frames; craft-media's `Mp4Writer` writes the file in
+memory with the index first, then it is saved atomically.
+
 ## App (`apps/boardcraft`)
 
 - `app.rs`: state, menus, file actions, shortcuts, pixel undo, playback clock, screenshot mode.
@@ -79,6 +95,9 @@ the frame never leaves the canvas.
   selection is shown through a preview texture and touches the project only when applied, so it is
   one undo step), the view transform with rotation (`view.rs`), fill and the tools' shortcuts and
   menu entries (`mod.rs`).
+- `audio_ui.rs`: Import Audio, the waveform strip, the inspector's Sound section, playback sync;
+  `audio_out.rs`: the cpal output stream (the only module that touches the sound device).
+- `movie_ui.rs`: the Export Movie dialog and the background export with progress and Cancel.
 - `textures.rs`: one full-size and one thumbnail texture per panel, rebuilt on `revision`.
 - Playback renders nothing per frame on the CPU: it draws the panel's texture with UV coordinates
   from the camera view.

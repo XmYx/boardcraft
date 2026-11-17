@@ -8,6 +8,11 @@
 //! scene's stable id). Formats that carry application data (OTIO metadata) keep the panel id, text
 //! and camera keys under `boardcraft`.
 //!
+//! Sound clips go on audio tracks (overlapping clips on further tracks), each referencing its
+//! source file, written unchanged beside the stills as `sound_<clip id>.<ext>`, with its trim and
+//! gain; OTIO keeps the clip id and panel anchor under `boardcraft`. The EDL lists them as `A`/`AA`
+//! events.
+//!
 //! Conform matches clips to panels by the panel id in the clip's `boardcraft` metadata, then by the
 //! clip name `Panel 1.2`, then by the still's file name, and sets each matched panel's duration to
 //! the clip's, rounded to whole frames at the board's rate.
@@ -22,6 +27,7 @@ use craft_timeline::{FrameRate, Report, Tick};
 use serde::Serialize;
 use serde_json::json;
 
+use crate::audio::AudioClip;
 use crate::error::{Error, Result};
 use crate::model::{Id, Project};
 use crate::stills::{still_name, write_stills};
@@ -83,6 +89,23 @@ impl TimelineFormat {
     }
 }
 
+/// File name of a sound clip's source in an export's media folder: `sound_<clip id>.<ext>`.
+pub fn audio_file_name(clip: &AudioClip) -> String {
+    format!("sound_{}.{}", clip.id.0, clip.ext)
+}
+
+/// Write every sound clip's source into `dir` (created if needed). Returns the files written.
+pub fn write_audio_files(project: &Project, dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut written = Vec::new();
+    for c in project.audio.iter().filter(|c| !c.data.is_empty()) {
+        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        let path = dir.join(audio_file_name(c));
+        craft_atomic::atomic_write(&path, &c.data).map_err(|e| Error::io(&path, e))?;
+        written.push(path);
+    }
+    Ok(written)
+}
+
 fn rate(project: &Project) -> FrameRate {
     let (n, d) = project.settings.rate();
     FrameRate::new(n as i64, d as i64)
@@ -136,6 +159,33 @@ pub fn to_model(project: &Project, stills_dir: &Path) -> (craft_timeline::model:
             t += dur;
         }
     }
+    let fps = project.settings.fps_f64();
+    for c in &project.audio {
+        let len = c.length_frames(fps) as i64;
+        if len <= 0 {
+            continue;
+        }
+        let file = audio_file_name(c);
+        let path = stills_dir.join(&file).to_string_lossy().into_owned();
+        let source = len + c.trim_in as i64;
+        let spec = MediaSpec {
+            duration: Some(r.tick_of(source)),
+            video: None,
+            audio: Some((c.sample_rate, u32::from(c.channels.max(1)))),
+            start_tc: None,
+            kind: Some(MediaKind::AudioOnly),
+        };
+        let item = b.file_media(&path, &file, &path, &spec, None);
+        let mut clip = b.clip(item, TrackKind::Audio, &c.name, r.tick_of(c.start as i64), r.tick_of(len), r.tick_of(c.trim_in as i64));
+        clip.gain_db = f64::from(c.gain_db);
+        clip.ext = Some(
+            json!({
+                "audio_id": c.id.0, "anchor_panel": c.anchor.map(|a| a.panel.0), "anchor_offset": c.anchor.map(|a| a.offset),
+            })
+            .to_string(),
+        );
+        b.place(&mut seq, TrackKind::Audio, 0, clip);
+    }
     b.put_sequence(seq_id, seq);
     b.top.push(seq_id);
     (b.finish().project, seq_id)
@@ -182,6 +232,28 @@ fn edl(project: &Project, stills_dir: &Path) -> String {
             t += dur;
         }
     }
+    let fps = project.settings.fps_f64();
+    for c in &project.audio {
+        let len = c.length_frames(fps) as i64;
+        if len <= 0 {
+            continue;
+        }
+        let file = audio_file_name(c);
+        let (trim, start) = (c.trim_in as i64, c.start as i64);
+        events.push(OutEvent {
+            lines: vec![OutLine {
+                reel: sanitize_reel(&format!("SND{}", c.id.0), 8),
+                chan: if c.channels >= 2 { "AA".into() } else { "A".into() },
+                trans: "C".into(),
+                dur: None,
+                src: (trim, trim + len),
+                rec: (start, start + len),
+            }],
+            m2: None,
+            comments: vec![format!("FROM CLIP NAME: {}", c.name), format!("SOURCE FILE: {}", stills_dir.join(&file).display())],
+            locators: Vec::new(),
+        });
+    }
     write(&header, &events)
 }
 
@@ -204,8 +276,8 @@ pub fn document(project: &Project, format: TimelineFormat, stills_dir: &Path) ->
     Ok((text, report.entries.iter().map(|e| e.message.clone()).collect()))
 }
 
-/// Export the animatic: `path` (format from its extension) plus stills in `<stem>_stills/` beside
-/// it. Returns the stills folder.
+/// Export the animatic: `path` (format from its extension) plus stills and sound files in
+/// `<stem>_stills/` beside it. Returns that folder.
 pub fn export(project: &Project, path: &Path) -> Result<PathBuf> {
     let format = TimelineFormat::from_path(path).ok_or_else(|| Error::Unsupported(format!("{}: use .otio, .edl, .xml or .fcpxml", path.display())))?;
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
@@ -214,6 +286,7 @@ pub fn export(project: &Project, path: &Path) -> Result<PathBuf> {
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "animatic".into());
     let stills = parent.join(format!("{stem}_stills"));
     write_stills(project, &stills)?;
+    write_audio_files(project, &stills)?;
     let (text, _) = document(project, format, &stills)?;
     craft_atomic::atomic_write(path, text.as_bytes()).map_err(|e| Error::io(path, e))?;
     Ok(stills)
@@ -264,6 +337,10 @@ fn edit_clips(path: &Path, bytes: &[u8]) -> Result<(TimelineFormat, Vec<EditClip
         let mut clips = Vec::new();
         for ev in &doc.events {
             let Some(line) = ev.lines.first() else { continue };
+            // Sound events are not panels.
+            if !line.chans.is_empty() && !line.chans.contains(&craft_timeline::edl::Channel::V) {
+                continue;
+            }
             let rec_in = line.tcs[2].frames(r, line.tcs[2].df);
             let rec_out = line.tcs[3].frames(r, line.tcs[3].df);
             let file = ev.from_clip.clone().unwrap_or_default();
@@ -369,6 +446,37 @@ mod tests {
             assert_eq!(q.panel(second).unwrap().duration, 10, "{f:?}");
             assert!(r.unused_panels.is_empty());
         }
+    }
+
+    #[test]
+    fn sound_goes_on_audio_tracks_in_every_format() {
+        let mut p = board();
+        let second = p.scenes[0].panels[1].id;
+        let a = p.add_audio("Dialogue take 3", "wav", crate::audio::tone_wav(440.0, 1.0, 48_000, 2), 0).unwrap();
+        p.set_audio_anchor(a, Some(second)).unwrap();
+        p.add_audio("Rain", "wav", crate::audio::tone_wav(110.0, 0.5, 8_000, 1), 2).unwrap();
+        let (model, seq) = to_model(&p, Path::new("/x"));
+        let seq = model.sequence(seq).unwrap();
+        assert_eq!(seq.audio_tracks.len(), 2, "overlapping clips go on two tracks");
+        let first = &seq.audio_tracks[0].items[0];
+        assert_eq!(first.name, "Dialogue take 3");
+        assert_eq!(first.duration, rate(&p).tick_of(24));
+        for f in TimelineFormat::ALL {
+            let (text, notes) = document(&p, f, Path::new("/x")).unwrap();
+            assert!(text.contains(&format!("sound_{}.wav", a.0)), "{f:?}");
+            assert!(notes.is_empty(), "{f:?}: {notes:?}");
+            // Conform ignores the sound and still matches every panel.
+            let mut q = p.clone();
+            let r = conform(&mut q, Path::new(&format!("cut.{}", f.extension())), text.as_bytes()).unwrap();
+            assert_eq!((r.matched, r.unmatched_clips), (3, 0), "{f:?}: {r:?}");
+        }
+        let (edl, _) = document(&p, TimelineFormat::Edl, Path::new("/x")).unwrap();
+        assert!(edl.contains(" AA "), "{edl}");
+        // The export writes the sources next to the stills.
+        let dir = std::env::temp_dir().join(format!("boardcraft-tl-audio-{}", std::process::id()));
+        let folder = export(&p, &dir.join("cut.otio")).unwrap();
+        assert!(folder.join(format!("sound_{}.wav", a.0)).exists());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

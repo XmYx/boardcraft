@@ -29,6 +29,8 @@ craft-i18n = { workspace = true }
 craft-settings = { workspace = true }
 serde = { workspace = true }
 craft-fonts-build = { workspace = true }
+# Audio output for animatic playback (Apache-2.0; as FilmCraft).
+cpal = "0.17"
 
 [build-dependencies]
 craft-fonts-build = { workspace = true }

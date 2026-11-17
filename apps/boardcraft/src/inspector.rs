@@ -213,6 +213,8 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                 app.delete_panel();
             }
         });
+        ui.separator();
+        crate::audio_ui::inspector(app, ui);
     });
 }
 

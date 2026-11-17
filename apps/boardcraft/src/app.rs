@@ -108,6 +108,11 @@ pub struct BoardApp {
     pub recoverable: Vec<crate::autosave::Recoverable>,
     /// Pen tuning, selections, fill and view rotation (`crate::tools`).
     pub tools: crate::tools::ToolState,
+    /// The audio track: decoded clips, sound output, strip state.
+    pub audio: crate::audio_ui::AudioState,
+    /// Export Movie dialog, when open, and the running export.
+    pub movie_dialog: Option<crate::movie_ui::Dialog>,
+    pub movie_job: Option<crate::movie_ui::Job>,
 }
 
 fn pick_layer(project: &Project, panel: Option<Id>) -> Option<Id> {
@@ -168,6 +173,9 @@ impl BoardApp {
             external: Vec::new(),
             last_point: None,
             tools: crate::tools::ToolState::new(cli.data_dir.as_deref(), cli.screenshot.is_some()),
+            audio: Default::default(),
+            movie_dialog: None,
+            movie_job: None,
         };
         app.recoverable = app.autosave.recoverable();
         if cli.demo {
@@ -194,6 +202,7 @@ impl BoardApp {
         self.stroke = None;
         self.playing = false;
         self.playhead = 0.0;
+        self.audio = Default::default();
         let first = self.project.panels().next().map(|(_, p)| p.id);
         self.select(first);
     }
@@ -515,6 +524,8 @@ impl BoardApp {
 
     /// The document changed: mark it unsaved and count the edit (for undo).
     pub fn edited(&mut self) {
+        // Sound anchored to panels follows edits made outside commands (typed durations).
+        self.project.sync_audio();
         self.dirty = true;
         self.edits = self.edits.wrapping_add(1);
     }
@@ -733,6 +744,13 @@ impl BoardApp {
                 if ui.button(tl!("Import Image to Panel…")).clicked() {
                     self.import_image();
                 }
+                if ui
+                    .button(tl!("Import Audio…"))
+                    .on_hover_text(tl!("Add a sound file at the selected panel; it moves with the panel when you retime"))
+                    .clicked()
+                {
+                    crate::audio_ui::import(self);
+                }
                 ui.separator();
                 ui.menu_button(tl!("Export Animatic Timeline"), |ui| {
                     for f in TimelineFormat::ALL {
@@ -765,6 +783,9 @@ impl BoardApp {
                 }
                 if ui.button(tl!("Export Panel Images (PNG)…")).clicked() {
                     self.export_pngs();
+                }
+                if ui.button(tl!("Export Movie (MP4)…")).clicked() {
+                    self.movie_dialog = Some(Default::default());
                 }
                 ui.separator();
                 if ui.button(tl!("Quit")).clicked() {
@@ -996,6 +1017,8 @@ impl BoardApp {
             self.confirm_close = true;
         }
         self.advance_playback(ctx);
+        crate::audio_ui::sync_playback(self);
+        crate::movie_ui::poll(self, ctx);
         let title = self.title();
         if title != self.last_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
@@ -1039,6 +1062,7 @@ impl BoardApp {
                 // The status line is a polite live region: results of actions are announced.
                 let status = ui.label(&self.status);
                 ui.ctx().accesskit_node_builder(status.id, |n| n.set_live(egui::accesskit::Live::Polite));
+                crate::movie_ui::status(self, ui);
             });
         });
         egui::Panel::bottom("timeline").resizable(true).default_size(150.0).min_size(110.0).show(ui, |ui| crate::timeline::show(self, ui));
@@ -1050,6 +1074,7 @@ impl BoardApp {
         self.close_dialog(&ctx);
         self.recovery_dialog(&ctx);
         crate::settings::show(self, &ctx);
+        crate::movie_ui::show(self, &ctx);
         crate::external::poll(self, &ctx);
         self.screenshot_step(&ctx);
     }
