@@ -1,0 +1,1 @@
+| 2026-11-17 | Fountain import follows ScriptCraft's interop contract: text before the first heading makes no scene, the first `[[scene-id]]` note wins; checked against ScriptCraft's sample and scene list |

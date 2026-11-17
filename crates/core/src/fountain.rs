@@ -199,20 +199,30 @@ pub fn parse(text: &str) -> Script {
     }
 
     let mut scene: Option<ScriptScene> = None;
-    let push_beat = |scene: &mut Option<ScriptScene>, beat: Beat| scene.get_or_insert_with(ScriptScene::default).beats.push(beat);
+    // Text before the first scene heading (`FADE IN:`) belongs to no scene (ScriptCraft
+    // docs/interop.md), so it makes no panels.
+    let push_beat = |scene: &mut Option<ScriptScene>, beat: Beat| {
+        if let Some(s) = scene.as_mut() {
+            s.beats.push(beat);
+        }
+    };
 
     let mut pending_id: Option<String> = None;
     for block in blocks {
         // A `[[scene-id: x]]` note belongs to the scene whose heading is in or before this block.
         if let Some(id) = pending_id.take()
             && let Some(s) = scene.as_mut()
+            && s.scene_id.is_none()
         {
+            // The first `scene-id:` note after a heading wins (ScriptCraft docs/interop.md).
             s.scene_id = Some(id);
         }
         let mut lines: Vec<&str> = Vec::new();
         for l in block {
             if let Some(id) = l.trim().strip_prefix("\u{1}scene-id:").and_then(|r| r.strip_suffix('\u{1}')) {
-                pending_id = Some(id.trim().to_string());
+                if pending_id.is_none() {
+                    pending_id = Some(id.trim().to_string());
+                }
                 continue;
             }
             lines.push(l);
@@ -277,7 +287,9 @@ pub fn parse(text: &str) -> Script {
         }
     }
     if let Some(mut s) = scene {
-        if let Some(id) = pending_id {
+        if let Some(id) = pending_id
+            && s.scene_id.is_none()
+        {
             s.scene_id = Some(id);
         }
         script.scenes.push(s);
@@ -304,8 +316,7 @@ pub fn append_to_project(project: &mut Project, script: &Script) -> (usize, usiz
     let fps = project.settings.fps.max(1) as f32;
     let mut panels = 0;
     for s in &script.scenes {
-        let heading = if s.heading.is_empty() { "PROLOGUE".to_string() } else { s.heading.clone() };
-        let scene_id = project.add_scene(&heading);
+        let scene_id = project.add_scene(&s.heading);
         let mut created = Vec::new();
         for beat in &s.beats {
             if let Beat::Transition(t) = beat
@@ -399,6 +410,31 @@ mod tests {
         assert_eq!(p.scenes[0].panels[1].dialogue, "MARA (to herself): One more night, old friend.");
         assert_eq!(p.scenes[0].panels[1].notes, "CUT TO:");
         assert!(p.panels().all(|(_, x)| x.duration >= 36 && x.duration <= 8 * 24));
+    }
+
+    /// The shape ScriptCraft writes (its docs/interop.md): a title page, a section, a synopsis and
+    /// `FADE IN:` before the first heading, `[[scene-id: <16 hex>]]` as its own paragraph after a
+    /// heading, extensions on cues, a shot line. Hand-written for this test.
+    #[test]
+    fn scriptcraft_handoff_shape() {
+        let text = "Title: THE TEST REEL\nAuthor: Someone\n\n# Act One\n\n= A synopsis.\n\nFADE IN:\n\n\
+                    EXT. PIER - NIGHT #4A#\n\n= Pier synopsis.\n\n[[scene-id: 0123456789abcdef]]\n\n[[scene-id: fedcba9876543210]]\n\n\
+                    Fog rolls in.\n\nANNA (V.O.)\n(quietly)\nStill here.\n\nCLOSE ON THE ROPE\n\nCUT TO:\n\n\
+                    INT. SHED - CONTINUOUS\n\nAnna lights a lamp.\n";
+        let s = parse(text);
+        assert_eq!(s.title, "THE TEST REEL");
+        assert_eq!(s.scenes.len(), 2, "FADE IN: before the first heading makes no scene");
+        let pier = &s.scenes[0];
+        assert_eq!(pier.number.as_deref(), Some("4A"));
+        assert_eq!(pier.scene_id.as_deref(), Some("0123456789abcdef"), "the first scene-id note wins");
+        assert_eq!(pier.beats.len(), 4);
+        assert!(matches!(&pier.beats[1], Beat::Dialogue { character, parenthetical: Some(p), .. } if character == "ANNA (V.O.)" && p == "quietly"));
+        assert!(matches!(&pier.beats[2], Beat::Action(t) if t == "CLOSE ON THE ROPE"));
+        assert_eq!(s.scenes[1].scene_id, None);
+        let board = project_from_script(&s, Settings::default());
+        assert_eq!(board.scenes[0].source_scene_id, "0123456789abcdef");
+        assert_eq!(board.scenes[0].number, "4A");
+        assert_eq!(board.scenes[0].panels.len(), 3, "action, dialogue, shot; CUT TO: becomes a note");
     }
 
     #[test]
