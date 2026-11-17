@@ -2,7 +2,8 @@
 
 ## Headline
 
-About **37%** of the professional reference (Toon Boom Storyboard Pro), up from about **33%** after
+About **41%** of the professional reference (Toon Boom Storyboard Pro), up from about **37%** before
+the audio, movie and sheet-options work was counted, **33%** after
 the drawing-tools pass, about **28%** after the polish pass and about **19%** before it (all
 2026-11-17; the camera and annotations pass moved the drawing and camera dimensions; the earlier
 "~5%" headline predated the interchange work and was not re-measured then). Against the free tools
@@ -25,10 +26,10 @@ feature set works today, weighted by everyday use. Re-measured 2026-11-17.
 | Board structure and navigation | 15% | 25% | 40% | duplicate panel, Board Settings, keyboard focus and navigation |
 | Drawing tools | 30% | 5% | 35% | canvas zoom/pan/rotate, straight lines, onion skin, edit in any image editor, faster strokes; pressure curve and stabilizer, lasso/rectangle select with transform and cut/copy/paste, bucket fill (drawing-tools pass); editable vector strokes and arrow/motion/camera symbols (annotations) |
 | Camera and staging | 15% | 10% | 30% | typed camera keys; rotation, any number of keys with a key strip, moves exported as Motion keyframes; still no 3D |
-| Timing, audio, playback | 15% | 10% | 20% | 23.976–60 fps, rate change keeping timing; still no audio |
+| Timing, audio, playback | 15% | 10% | 40% | 23.976–60 fps, rate change keeping timing; audio track with waveform, mixing and panel anchors; left: scrubbing, recording, fades, several audio tracks |
 | Script import / export | 15% | 50% | 55% | shot list CSV, shot field |
-| Printing and sharing | 10% | 35% | 45% | shot list; sheet field choice still missing |
-| **Weighted total** | | **≈19%** | **≈37%** | |
+| Printing and sharing | 10% | 35% | 60% | shot list, board-sheet options (fields, header, note lines), MP4 movie with burn-ins; left: sheet templates, MOV/ProRes |
+| **Weighted total** | | **≈19%** | **≈41%** | |
 
 Data safety (autosave, crash recovery, full undo, atomic saves) is not a feature dimension of the
 reference but was its users' most serious complaint category; BoardCraft now covers it.
@@ -40,9 +41,9 @@ reference but was its users' most serious complaint category; BoardCraft now cov
 | Scenes, panels | add, duplicate, delete, reorder, numbers, headings, shot type | acts/sequences, renumbering rules, panel split |
 | Drawing | pressure brush with pressure curve, minimum size and stabilizer, eraser, layers, image import, external editor round trip, zoom/pan/rotate view, straight lines, onion skin, lasso and rectangle select with move/scale/rotate and cut/copy/paste, bucket fill with gap closing; vector annotation layer (freehand vector strokes, arrows, motion arrows, camera arrows; select/move/recolour; SVG in and out) | vector brush with pressure, rulers, textured brushes, feathered selections, free distort |
 | Camera | pan/zoom/rotation keys, any number per panel, eased, key strip (add/select/move/delete by pointer or keyboard), typed values, Motion keyframes in timeline exports | per-key easing curves, 3D layers |
-| Timeline | duration retiming, playhead, scene bands, 23.976–60 fps | audio tracks, transitions |
+| Timeline | duration retiming, playhead, scene bands, 23.976–60 fps, audio track with waveform and anchors, camera-key strip | audio scrubbing and recording, several audio tracks, transitions |
 | Import | Fountain, Final Draft, ScriptCraft scene list; re-import by scene id; conform | PDF scripts, audio |
-| Export | OTIO, EDL, FCP7 XML, FCPXML (+ stills), PDF board sheets, shot list CSV, PNG panels | movie render with burn-ins, sheet templates |
+| Export | OTIO, EDL, FCP7 XML, FCPXML (+ stills, sound, Motion keyframes), MP4 movie with burn-ins, PDF board sheets with options, shot list CSV, PNG panels, SVG annotations | MOV/ProRes, sheet templates |
 | Safety | autosave, crash recovery, undo/redo for every edit, atomic saves | version history |
 
 ## What works today (evidence)

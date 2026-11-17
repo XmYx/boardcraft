@@ -19,8 +19,8 @@ working storyboard artist (from [user-research.md](user-research.md) and the
 | 9 | Vector strokes: ~~editable, resolution-free~~ done as annotations; left: pressure-shaped vector brush, vector layers in the layer stack | Drawing | no | 24 | — |
 | 10 | ~~Arrow and motion symbols as an annotation layer~~ done (arrow, motion arrow, camera arrow, SVG in/out) | Drawing | no | 0 | R21 |
 | 11 | ~~MCP server over the commands~~ done (`boardcraft-cli mcp`); a live channel into the running app remains | Agents | no | 8 | [mcp](mcp.md), R24 |
-| 12 | Translations in craft-i18n; translated core error texts | Suite | yes | 8 | [localization-parity](localization-parity.md) |
-| 13 | Final app icon and renders; macOS, Windows, Flatpak packaging | Packaging | yes | 8 | [assets/app-icon/README.md](../assets/app-icon/README.md) |
+| 12 | Translations: catalogs `locales/<locale>/boardcraft.tsv` in the craft-i18n repository (translators; 356 source texts listed in docs/i18n); translated core error texts | Suite | yes | 8 | [localization-parity](localization-parity.md) |
+| 13 | ~~Icon renders; macOS, Windows, Flatpak packaging~~ done (`cargo xtask icons`, packaging/); left: final ArtCraft icon artwork, icon embedded in boardcraft.exe, Windows install-policy check, a CI packaging run | Packaging | yes | 4 | [assets/app-icon/README.md](../assets/app-icon/README.md) |
 | 14 | Large boards: ~~textures for visible panels only, incremental autosave~~ done; left: tiled layers, lazy layer loading | Performance | yes | 10 | [architecture](architecture.md) |
 | 15 | ~~Conform applies order and deletions from the edit~~ done (order, and flags for left-out panels; opt-in) | Interchange | no | 0 | [interop](interop.md) |
 

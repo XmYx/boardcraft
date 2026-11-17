@@ -1,0 +1,1 @@
+| 2026-11-17 | Remaining polish items: audio track and MP4 movie export, drawing tools (pen tuning, selections, fill, view rotation), remappable shortcuts, sheet options, conform order, MCP server, camera rotation and key editor, Motion keyframes, vector annotations, large-board saves, icon renders and macOS/Windows/Flatpak packaging |

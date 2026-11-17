@@ -13,7 +13,7 @@
 
 | Measure | Today |
 |---|---|
-| Overall parity with the target (estimate) | ~28% (re-measured 2026-11-17; ~19% before the polish pass) |
+| Overall parity with the target (estimate) | ~41% (re-measured 2026-11-17; ~19% before the polish pass) |
 | Pipeline hand-offs | Fountain / FDX / scene-list JSON in (with re-import), OTIO / EDL / FCP7 XML / FCPXML out and conform back, PNG panels |
 | Tests | run `cargo xtask ci`: core, CLI, app UI (kittest, accessibility checks), xtask |
 
