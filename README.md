@@ -52,14 +52,22 @@ time the panels and play the animatic, then send the cut to FilmCraft.
 - **Views.** Board view (thumbnail grid grouped by scene), Panel view (canvas, tools, camera), and
   a timeline strip with scene bands, thumbnails and a playhead.
 - **Animatic playback.** Plays the panels for their durations at the project rate through each
-  panel's camera move, with the dialogue as a caption.
+  panel's camera move, with the dialogue as a caption, and the sound track through your speakers.
+- **Audio track.** File ▸ Import Audio adds WAV, AIFF, MP3, AAC/M4A, FLAC, Ogg Vorbis or Opus
+  (decoded by craft-audio) under the animatic with a waveform; clips mix, have trim and gain, and
+  are anchored to a panel so they stay in sync when you retime. Drag a clip, nudge it with the
+  arrow keys, or type its start.
+- **Movie export.** File ▸ Export Movie writes an MP4 (H.264 and AAC, pure Rust through
+  craft-video, craft-audio and craft-media) at board or half size, camera moves applied, with
+  optional burn-ins: panel number, timecode and dialogue. It runs in the background with progress
+  and Cancel.
 - **Screenplay import.** Fountain, Final Draft (`.fdx`) and ScriptCraft's scene list (JSON) become
   scenes and panels with text and an estimated duration.
 - **Re-import by scene id.** Importing a revised script updates the board in place: scenes matched
   by their stable id keep their drawings, cameras and timing and take the new text; new scenes are
   added, removed ones kept and reported.
 - **Timeline export.** The animatic as OpenTimelineIO, CMX 3600 EDL, Final Cut Pro 7 XML or FCPXML,
-  with rendered panel stills and scene markers (through craft-timeline). All four verified with
+  with rendered panel stills, the sound clips on audio tracks and scene markers (through craft-timeline). All four verified with
   FilmCraft's own importers.
 - **Conform.** Read an editor's cut back (any of the four) and take its panel timing.
 - **Board sheets.** Printable PDF pages (A4 or Letter, 3 or 6 panels a page; any grid from the
@@ -67,7 +75,7 @@ time the panels and play the animatic, then send the cut to FilmCraft.
   selectable text (craft-pdf).
 - **Shot list.** CSV with scene, panel, shot, start timecode, duration and text.
 - **Panel images.** Export every panel as a PNG.
-- **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer,
+- **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer and the sound files,
   documented in [docs/file-format.md](docs/file-format.md). Saves are atomic.
 
 - **Commands and CLI.** Every board edit is a command; `boardcraft-cli` runs them headless and

@@ -126,6 +126,40 @@ pub enum Command {
         name: String,
         text: String,
     },
+    /// Add a sound file (WAV, AIFF, MP3, AAC/M4A, FLAC, Ogg, Opus, …) to the audio track. It starts
+    /// at `start`, or at `panel`'s first frame and anchored to it, or at frame 0. `name` defaults to
+    /// the file's name.
+    AddAudio {
+        path: String,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        start: Option<u64>,
+        #[serde(default)]
+        panel: Option<Id>,
+    },
+    /// Move a sound clip to start at frame `start` (an anchored clip keeps its panel).
+    MoveAudio {
+        clip: Id,
+        start: u64,
+    },
+    RemoveAudio {
+        clip: Id,
+    },
+    /// Anchor a sound clip to a panel so it moves with it when the board is retimed (`null` frees it).
+    SetAudioAnchor {
+        clip: Id,
+        panel: Option<Id>,
+    },
+    SetAudioGain {
+        clip: Id,
+        gain_db: f32,
+    },
+    /// Skip `trim_in` frames at the start of the clip's source.
+    SetAudioTrim {
+        clip: Id,
+        trim_in: u64,
+    },
 }
 
 fn yes() -> bool {
@@ -149,8 +183,19 @@ fn ok(message: impl Into<String>) -> Result<Outcome> {
     Ok(Outcome { created: None, message: message.into() })
 }
 
-/// Apply `cmd` to `project`. On error the project is unchanged.
+fn clip_missing(id: Id) -> Error {
+    Error::NotFound(format!("sound clip {}", id.0))
+}
+
+/// Apply `cmd` to `project`. On error the project is unchanged. Afterwards sound clips anchored to
+/// panels follow their panels ([`Project::sync_audio`]).
 pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
+    let out = apply_inner(project, cmd)?;
+    project.sync_audio();
+    Ok(out)
+}
+
+fn apply_inner(project: &mut Project, cmd: &Command) -> Result<Outcome> {
     match cmd {
         Command::AddScene { heading } => {
             let s = project.add_scene(heading);
@@ -286,6 +331,60 @@ pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
         Command::Conform { name, text } => {
             let r = crate::timeline::conform(project, std::path::Path::new(name), text.as_bytes())?;
             ok(r.summary())
+        }
+        Command::AddAudio { path, name, start, panel } => {
+            let file = std::path::Path::new(path);
+            if let Some(p) = panel
+                && project.panel(*p).is_none()
+            {
+                return Err(panel_missing(*p));
+            }
+            let len = std::fs::metadata(file).map_err(|e| Error::io(file, e))?.len();
+            if len > crate::audio::MAX_AUDIO_BYTES {
+                return Err(Error::Audio(format!("{path} is larger than {} MB", crate::audio::MAX_AUDIO_BYTES >> 20)));
+            }
+            let bytes = std::fs::read(file).map_err(|e| Error::io(file, e))?;
+            let ext = file.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+            let name =
+                if name.is_empty() { file.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Sound".into()) } else { name.clone() };
+            let at = match (start, panel) {
+                (Some(s), _) => *s,
+                (None, Some(p)) => project.panel_start(*p).ok_or_else(|| panel_missing(*p))?,
+                (None, None) => 0,
+            };
+            let id = project.add_audio(&name, &ext, bytes, at)?;
+            if panel.is_some() {
+                project.set_audio_anchor(id, *panel)?;
+            }
+            Ok(Outcome { created: Some(id), message: format!("added sound {name}") })
+        }
+        Command::MoveAudio { clip, start } => {
+            project.move_audio(*clip, *start)?;
+            ok(format!("sound starts at frame {start}"))
+        }
+        Command::RemoveAudio { clip } => {
+            let before = project.audio.len();
+            project.audio.retain(|c| c.id != *clip);
+            if project.audio.len() == before {
+                return Err(clip_missing(*clip));
+            }
+            ok("removed sound")
+        }
+        Command::SetAudioAnchor { clip, panel } => {
+            project.set_audio_anchor(*clip, *panel)?;
+            ok(if panel.is_some() { "sound anchored to panel" } else { "sound unanchored" })
+        }
+        Command::SetAudioGain { clip, gain_db } => {
+            let c = project.audio_clip_mut(*clip).ok_or_else(|| clip_missing(*clip))?;
+            c.gain_db = *gain_db;
+            c.sanitize();
+            ok(format!("gain {:.1} dB", c.gain_db))
+        }
+        Command::SetAudioTrim { clip, trim_in } => {
+            let c = project.audio_clip_mut(*clip).ok_or_else(|| clip_missing(*clip))?;
+            c.trim_in = *trim_in;
+            c.sanitize();
+            ok(format!("trim {} frames", c.trim_in))
         }
         Command::ImportFountain { text } => {
             let script = fountain::parse(text);

@@ -10,6 +10,7 @@ industry's interchange formats on both sides:
 | Timeline out | OpenTimelineIO (`.otio`), CMX 3600 EDL (`.edl`), Final Cut Pro 7 XML (`.xml`), FCPXML 1.10 (`.fcpxml`), each with panel stills |
 | Timeline in (conform) | the same four: panel timing back from an editor's cut |
 | Images out | one PNG per panel |
+| Movie out | MP4: H.264 video and AAC sound, optional burn-ins |
 
 ## In: screenplays (Fountain)
 
@@ -93,6 +94,18 @@ frame rate (FilmCraft assumes 24).
 
 Camera moves are not carried yet (the stills are each panel's first camera frame).
 
+### Sound in the timeline exports
+
+The board's sound clips travel with the cut. Each clip's source file is copied unchanged into the
+same `<name>_stills/` folder as `sound_<clip id>.<ext>` and referenced by absolute path:
+
+- OTIO, FCP7 XML and FCPXML: one audio track (more when clips overlap), one clip per sound clip
+  at its start frame, with its trim as the source in-point and its gain; OTIO keeps the clip id
+  and the panel it is anchored to (`anchor_panel`, `anchor_offset`) in `metadata.boardcraft`.
+- EDL: one `A` (mono) or `AA` (stereo) event per clip, reel `SND<id>`, with `* FROM CLIP NAME:`
+  and `* SOURCE FILE:`.
+- Conform reads only the video events and tracks, so sound never counts as an unknown clip.
+
 ## In: conform timing from an edit
 
 When the editor retimes the animatic, File ▸ Conform Timing from Edit (`boardcraft-cli conform`,
@@ -101,6 +114,17 @@ duration to its clip's, rounded to whole frames at the board's rate. Clips are m
 id in OTIO metadata, then by the clip name `Panel 1.2`, then by the still's file name. The report
 lists clips that are not from this board and panels the edit no longer uses; panel order and
 deleted panels are reported, not applied.
+
+## Out: movie (MP4)
+
+File ▸ Export Movie, or `boardcraft-cli export-movie board.boardcraft cut.mp4 [--no-burn-in]
+[--half]`. Every frame is rendered as playback shows it (camera moves applied) at the board size or
+half of it, encoded to H.264 (craft-video) with the board's exact rate (23.976 included) and muxed
+into MP4 by craft-media with the index first. The sound track is mixed at 48 kHz stereo and encoded
+to AAC-LC (craft-audio). Burn-ins: the panel number top left, the timecode (`HH:MM:SS:FF`,
+non-drop) top right, and up to two lines of the panel's dialogue at the bottom, drawn with the
+board-sheet font. A sound file that cannot be decoded is left out and reported; the movie is still
+written.
 
 ## Out: panel images
 

@@ -1,0 +1,1 @@
+| 2026-11-17 | Audio track (import, waveform strip, mixing, playback through cpal, clips anchored to panels follow retimes, sound on the audio tracks of every timeline export) and movie export (H.264/AAC MP4 with panel, timecode and dialogue burn-ins, background with progress and Cancel, `boardcraft-cli export-movie`) |

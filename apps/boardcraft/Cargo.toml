@@ -26,6 +26,8 @@ serde_json = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 craft-i18n = { workspace = true }
 craft-fonts-build = { workspace = true }
+# Audio output for animatic playback (Apache-2.0; as FilmCraft).
+cpal = "0.17"
 
 [build-dependencies]
 craft-fonts-build = { workspace = true }

@@ -139,6 +139,9 @@ fn custom_colours_meet_4_5_to_1_in_both_themes() {
     for band in crate::timeline::SCENE_COLORS {
         assert!(contrast(egui::Color32::WHITE, band) >= 4.5, "{band:?}");
     }
+    // Sound clips: white names at 4.5:1, the waveform at 3:1 (graphics).
+    assert!(contrast(egui::Color32::WHITE, crate::audio_ui::CLIP_FILL) >= 4.5);
+    assert!(contrast(crate::audio_ui::WAVE, crate::audio_ui::CLIP_FILL) >= 3.0);
     for visuals in [crate::app::readable_visuals(egui::Visuals::dark()), crate::app::readable_visuals(egui::Visuals::light())] {
         let bg = visuals.panel_fill;
         assert!(contrast(visuals.text_color(), bg) >= 4.5);
@@ -276,4 +279,82 @@ fn duplicate_onion_zoom_and_shot_presets() {
     let copy = h.state().selected.unwrap();
     assert_ne!(copy, id);
     assert_eq!(h.state().project.panel(copy).unwrap().shot, h.state().project.panel(id).unwrap().shot);
+}
+
+#[test]
+fn sound_clip_imports_shows_and_moves_by_keyboard() {
+    let mut h = harness(StartView::Board);
+    h.run();
+    h.get_by_label("Panel 2.1").click();
+    h.run();
+    let panel = h.state().selected.unwrap();
+    let dir = std::env::temp_dir().join(format!("boardcraft-ui-sound-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let wav = dir.join("tone.wav");
+    std::fs::write(&wav, boardcraft_core::audio::tone_wav(440.0, 1.0, 16_000, 1)).unwrap();
+    crate::audio_ui::import_path(h.state_mut(), &wav);
+    h.run();
+    let start = h.state().project.panel_start(panel).unwrap();
+    let clip = h.state().project.audio[0].clone();
+    assert_eq!(clip.start, start);
+    assert!(h.state().status.contains("tone"), "{}", h.state().status);
+    // The strip publishes the clip as a button; arrows nudge it while it has focus.
+    let node = h.get(By::new().role(egui::Role::Button).label_contains("Sound tone at"));
+    node.focus();
+    h.run();
+    h.key_press(egui::Key::ArrowRight);
+    h.run();
+    assert_eq!(h.state().project.audio[0].start, start + 1);
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    h.run();
+    let fps = h.state().project.settings.fps as u64;
+    assert_eq!(h.state().project.audio[0].start, start + 1 + fps);
+    assert!(h.get(By::new().role(egui::Role::Button).label_contains("Sound tone at")).is_focused(), "focus stays on the clip");
+    // Typed alternative in the inspector, and sync on retime.
+    assert!(h.query_by_label("Start").is_some());
+    assert!(h.query_by_label("Gain").is_some());
+    let first = h.state().project.scenes[0].panels[0].id;
+    h.state_mut().run(boardcraft_core::command::Command::SetDuration { panel: first, frames: 10 });
+    h.run();
+    let moved = h.state().project.audio[0].start;
+    assert_eq!(moved, h.state().project.panel_start(panel).unwrap() + 1 + fps, "the clip moved with its panel");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn movie_export_dialog_and_background_export() {
+    let mut h = harness(StartView::Board);
+    h.run();
+    h.get_by_label("File").click();
+    h.run();
+    h.get_by_label("Export Movie (MP4)…").click();
+    h.run();
+    h.run();
+    assert!(h.state().movie_dialog.is_some());
+    assert!(h.query_by_label("Burn-ins: panel number, timecode and dialogue").is_some());
+    assert!(h.get(By::new().role(egui::Role::RadioButton).label_contains("Board size")).is_focused(), "the dialog takes focus");
+    h.key_press(egui::Key::Escape);
+    h.run();
+    assert!(h.state().movie_dialog.is_none(), "Esc closes the dialog");
+    // A small board exports on a background thread with progress in the status bar.
+    let script = boardcraft_core::fountain::parse("INT. A\n\nRain.\n\nBOB\nHi.\n");
+    let mut small = boardcraft_core::fountain::project_from_script(&script, boardcraft_core::Settings { width: 64, height: 36, fps: 12, ntsc: false });
+    for p in small.scenes.iter_mut().flat_map(|s| s.panels.iter_mut()) {
+        p.duration = 4;
+    }
+    h.state_mut().replace_project(small, None);
+    let path = std::env::temp_dir().join(format!("boardcraft-ui-movie-{}.mp4", std::process::id()));
+    crate::movie_ui::start(h.state_mut(), path.clone(), boardcraft_core::movie::MovieSize::Board, true);
+    h.run();
+    for _ in 0..600 {
+        if h.state().movie_job.is_none() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        h.run();
+    }
+    assert!(h.state().movie_job.is_none(), "the export finished");
+    assert!(h.state().status.contains("Wrote the movie"), "{}", h.state().status);
+    assert_eq!(&std::fs::read(&path).unwrap()[4..8], b"ftyp");
+    std::fs::remove_file(&path).ok();
 }

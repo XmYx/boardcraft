@@ -1,0 +1,2 @@
+- Sound under the animatic: import WAV, MP3, AAC, FLAC, Ogg or Opus, see its waveform, hear it during playback, and anchor clips to panels so they stay in sync when you retime. Timeline exports carry the sound.
+- Export Movie: an MP4 of the animatic with camera moves, sound and burn-ins (panel number, timecode, dialogue), at full or half size.
