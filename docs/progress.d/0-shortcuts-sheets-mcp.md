@@ -1,0 +1,1 @@
+| 2026-11-17 | Remappable shortcuts (craft-keymap dialog, overrides kept per user), Export Board Sheet options (fields, header, ruled note lines; CLI flags), conform with edit order and left-out panel flags behind a summary, `boardcraft-cli mcp` (craft-mcp-server) |

@@ -14,3 +14,5 @@ workspace = true
 boardcraft-core = { workspace = true }
 epaint_default_fonts = { workspace = true }
 serde_json = { workspace = true }
+# `boardcraft-cli mcp`: the MCP server machinery (JSON-RPC over stdio).
+craft-mcp-server = { workspace = true }

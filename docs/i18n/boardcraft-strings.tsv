@@ -4,8 +4,6 @@ app	+ Layer
 app	+ Panel
 app	= {seconds} s at {fps} fps
 app	A panel keeps at least one layer
-app	A4, 3 panels a page…
-app	A4, 6 panels a page…
 app	AI panel sketch
 app	AI sketch
 app	Action
@@ -13,6 +11,7 @@ app	Animatic timeline
 shared	Apply
 app	Aspect ratio
 app	Autosave failed: {error}
+app	Bigger Brush
 app	Board
 app	Board (panel grid)
 app	Board Settings
@@ -29,12 +28,16 @@ app	Camera moves
 shared	Cancel
 shared	Clear
 shared	Colour
+shared	Columns
 app	Conform Timing from Edit…
-app	Conformed timing from {file}: {summary}
+app	Conform to the Edit
+app	Conformed to {file}: {summary}
 app	Could not import {file}: {error}
 app	Could not open: {error}
+app	Could not read the edit: {error}
 app	Could not read {file}: {error}
 app	Could not recover: {error}
+app	Could not save the shortcuts: {error}
 app	Could not write {file}: {error}
 app	Decide Later
 shared	Delete
@@ -53,24 +56,29 @@ shared	Duration
 shared	Edit
 app	Edit in Image Editor…
 app	Edit key:
+app	Edit: {file}
 app	Editing {file} in your image editor. Save there to update the panel.
 app	End
 app	Erase (E)
 shared	Eraser
 app	Export Animatic Timeline
-app	Export Board Sheet (PDF)
+app	Export Board Sheet
+app	Export Board Sheet (PDF)…
 app	Export Panel Images (PNG)…
 app	Export Shot List (CSV)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
+shared	Export…
 shared	File
-app	Fit Canvas (0)
+app	Fit Canvas
 app	Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings.
 shared	Frame
 app	Frame rate
 app	Generate a sketch for this panel with the shared Craft AI tools (not connected yet)
+app	Go to Start
 app	Go to start
 app	Hardness
+app	Header text
 app	Heading
 shared	Height
 shared	Image
@@ -83,11 +91,12 @@ app	Keep panel lengths in seconds
 app	Keep the autosaves and ask again next time
 app	Key at end
 app	Key at start
+shared	Keyboard Shortcuts…
 shared	Language
 shared	Layer
 shared	Layers
-app	Letter, 3 panels a page…
-app	Letter, 6 panels a page…
+shared	Letter
+app	Mark panels the edit leaves out (nothing is deleted)
 shared	Move Down
 app	Move Earlier
 app	Move Later
@@ -98,9 +107,11 @@ app	New Board…
 app	New Panel
 app	New Scene
 app	New panel at the end of this scene
+app	Next Frame
+app	Next Panel
 app	No panel selected.
 app	Notes
-app	Onion Skin (O)
+app	Onion Skin
 app	Open this layer in your image editor; BoardCraft reloads it when you save there
 app	Opened {file}
 shared	Open…
@@ -110,13 +121,21 @@ app	Panel (draw and camera)
 app	Panel canvas
 app	Panel {label}
 app	Panel {label} on the timeline
+shared	Paper
 shared	Pause
 app	Pause Animatic
 shared	Play
 app	Play Animatic
+app	Play or Pause Animatic
 app	Play the animatic (Space)
+app	Playback
 app	Pressure: opacity
 app	Pressure: size
+app	Previous Frame
+app	Previous Panel
+app	Print under each panel
+app	Production, episode, draft
+app	Put panels in the edit's order
 app	Quit
 app	Recover unsaved work
 app	Recover {name}
@@ -124,6 +143,8 @@ app	Recovered unsaved work. Save it to keep it.
 shared	Redo
 app	Redone
 app	Reset camera
+shared	Rows
+app	Ruled lines for handwritten notes
 shared	Save
 shared	Save As…
 app	Save failed: {error}
@@ -136,16 +157,22 @@ app	Select a panel first
 app	Select a panel.
 app	Select a visible layer to draw on
 app	Set the frame to {ratio}, keeping its width
+app	Shortcut changes discarded
+app	Shortcuts saved
 app	Shot
 app	Shot presets
 shared	Size
+app	Smaller Brush
 app	Start
 app	Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view.
+app	Switch Board and Panel View
 shared	System
-app	Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
+app	Take panel durations, and optionally their order, from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
+app	The edit uses every panel
 shared	Timeline
 app	Timing
 app	To Start
+shared	Tools
 shared	Undo
 app	Undone
 shared	Unsaved changes
@@ -153,12 +180,15 @@ app	Untitled board
 app	Updated the board from {file}: {summary}
 app	Updated the layer from {file}
 shared	View
+app	What changes
 shared	Width
 app	Wrote the board sheet {file} ({n} pages)
 app	Wrote the shot list {file}
 app	Wrote {file}; open it in your image editor ({error})
 app	Wrote {n} panel images to {dir}
 shared	Zoom
+shared	Zoom In
+shared	Zoom Out
 app	camera move
 app	frame {f}
 app	s
@@ -169,3 +199,11 @@ app	{layer} opacity
 app	{layer} options
 app	{layer} visible
 app	{name}, autosaved {time}
+app	{n} clips are not from this board
+app	{n} clips matched to panels
+app	{n} panels a page, {pages} pages
+app	{n} panels are not in the edit: {panels}
+app	{n} panels change place, {m} of them to another scene
+app	{n} panels get a new duration
+app	{n} panels get the note “{mark}”, {m} lose it
+app	{n} scenes are left empty and removed

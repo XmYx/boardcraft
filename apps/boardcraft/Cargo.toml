@@ -26,6 +26,10 @@ serde_json = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 craft-i18n = { workspace = true }
 craft-fonts-build = { workspace = true }
+# Remappable shortcuts and the shared Keyboard Shortcuts dialog; user overrides in config.toml.
+craft-keymap = { workspace = true, features = ["ui"] }
+craft-settings = { workspace = true }
+serde = { workspace = true }
 
 [build-dependencies]
 craft-fonts-build = { workspace = true }

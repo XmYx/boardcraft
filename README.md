@@ -61,17 +61,22 @@ time the panels and play the animatic, then send the cut to FilmCraft.
 - **Timeline export.** The animatic as OpenTimelineIO, CMX 3600 EDL, Final Cut Pro 7 XML or FCPXML,
   with rendered panel stills and scene markers (through craft-timeline). All four verified with
   FilmCraft's own importers.
-- **Conform.** Read an editor's cut back (any of the four) and take its panel timing.
-- **Board sheets.** Printable PDF pages (A4 or Letter, 3 or 6 panels a page; any grid from the
-  CLI) with each panel's picture, number, duration, scene heading, dialogue, action and notes, as
-  selectable text (craft-pdf).
+- **Conform.** Read an editor's cut back (any of the four) and take its panel timing; optionally
+  also its panel order and a note on panels it leaves out, after a summary of what changes.
+- **Board sheets.** Printable PDF pages (A4 or Letter, any grid up to 6×6) with each panel's
+  picture, number, duration, scene heading and the fields you choose (shot, dialogue, action,
+  notes), an optional header line and ruled lines for handwritten notes, as selectable text
+  (craft-pdf).
+- **Keyboard shortcuts.** Every shortcut can be changed in Edit ▸ Keyboard Shortcuts… (the shared
+  craft-keymap dialog); menus show the current keys and changes are kept per user.
 - **Shot list.** CSV with scene, panel, shot, start timecode, duration and text.
 - **Panel images.** Export every panel as a PNG.
 - **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer,
   documented in [docs/file-format.md](docs/file-format.md). Saves are atomic.
 
-- **Commands and CLI.** Every board edit is a command; `boardcraft-cli` runs them headless and
-  exports, for scripts and agents ([docs/cli.md](docs/cli.md)).
+- **Commands, CLI and MCP.** Every board edit is a command; `boardcraft-cli` runs them headless and
+  exports, for scripts and agents ([docs/cli.md](docs/cli.md)), and `boardcraft-cli mcp` serves a
+  board to MCP clients ([docs/mcp.md](docs/mcp.md)).
 - **Accessible.** Every control has an AccessKit name; panels, timeline blocks and the canvas
   publish nodes; every drag has a keyboard or typed alternative; checked by kittest tests.
 - **Languages.** Interface text goes through craft-i18n; translations arrive with

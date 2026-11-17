@@ -100,6 +100,13 @@ pub struct BoardApp {
     pub last_point: Option<(Id, Id, boardcraft_core::StrokePoint)>,
     /// Boards a crashed session left; offered at start.
     pub recoverable: Vec<crate::autosave::Recoverable>,
+    /// Keyboard shortcuts (remappable) and their dialog.
+    pub shortcuts: crate::keys::Shortcuts,
+    /// Export Board Sheet dialog, when open, and the options it last used.
+    pub sheet_dialog: Option<crate::sheet_dialog::Dialog>,
+    pub sheet_options: sheet::SheetOptions,
+    /// Conform confirmation, when open.
+    pub conform_dialog: Option<crate::conform_dialog::Dialog>,
 }
 
 fn pick_layer(project: &Project, panel: Option<Id>) -> Option<Id> {
@@ -118,6 +125,8 @@ impl BoardApp {
         crate::i18n::install_fonts(ctx);
         apply_contrast(ctx);
         crate::i18n::set_language(None);
+        // Screenshot runs touch nothing in the user's data folder.
+        let data_dir = if cli.screenshot.is_some() { None } else { cli.data_dir.clone().or_else(crate::autosave::default_data_dir) };
         let mut app = Self {
             project: Project::blank("Untitled board"),
             path: None,
@@ -147,11 +156,11 @@ impl BoardApp {
             last_title: String::new(),
             focus_selected: false,
             language: None,
-            autosave: crate::autosave::Autosave::new(if cli.screenshot.is_some() {
-                None
-            } else {
-                cli.data_dir.clone().or_else(crate::autosave::default_data_dir)
-            }),
+            shortcuts: crate::keys::Shortcuts::new(data_dir.as_deref()),
+            autosave: crate::autosave::Autosave::new(data_dir),
+            sheet_dialog: None,
+            sheet_options: Default::default(),
+            conform_dialog: None,
             recoverable: Vec::new(),
             onion: false,
             canvas_zoom: 1.0,
@@ -319,15 +328,14 @@ impl BoardApp {
         }
     }
 
-    /// Take panel timing from an editor's cut of an exported timeline.
+    /// Take panel timing (and optionally order) from an editor's cut of an exported timeline,
+    /// after a summary of what changes (`conform_dialog`).
     pub fn conform(&mut self) {
         let Some(path) = Self::dialog().add_filter(tl!("Timeline"), &["otio", "edl", "xml", "fcpxml"]).pick_file() else { return };
         match std::fs::read(&path) {
             Ok(bytes) => {
-                let cmd = Command::Conform { name: path.to_string_lossy().into_owned(), text: String::from_utf8_lossy(&bytes).into_owned() };
-                if let Some(out) = self.run(cmd) {
-                    self.status = tlf!("Conformed timing from {file}: {summary}", file = path.display(), summary = out.message);
-                }
+                self.conform_dialog =
+                    Some(crate::conform_dialog::Dialog::new(path.to_string_lossy().into_owned(), String::from_utf8_lossy(&bytes).into_owned()))
             }
             Err(e) => self.status = tlf!("Could not read {file}: {error}", file = path.display(), error = e),
         }
@@ -359,24 +367,20 @@ impl BoardApp {
         }
     }
 
-    /// Export a printable board sheet (PDF) on `paper` with `columns` × `rows` panels a page.
-    pub fn export_sheet(&mut self, paper: sheet::Paper, columns: u32, rows: u32) {
+    /// Export a printable board sheet (PDF) with `opts`, asking where.
+    pub fn export_sheet(&mut self, opts: &sheet::SheetOptions) {
         let Some(mut path) = Self::dialog().add_filter("PDF", &["pdf"]).set_file_name(format!("{}.pdf", self.project.name)).save_file() else { return };
         if path.extension().is_none() {
             path.set_extension("pdf");
         }
-        let labels = sheet::SheetLabels {
-            dialogue: tl!("Dialogue").into(),
-            action: tl!("Action").into(),
-            notes: tl!("Notes").into(),
-            page_of: tl!("Page {n} of {total}").into(),
-            seconds: tl!("s").into(),
-        };
-        let opts = sheet::SheetOptions { paper, columns, rows, labels };
+        self.export_sheet_to(&path, opts);
+    }
+
+    pub fn export_sheet_to(&mut self, path: &Path, opts: &sheet::SheetOptions) {
         let (font, index) = crate::i18n::sheet_font();
-        let result = sheet::board_sheet_pdf(&self.project, &opts, font, index).and_then(|pdf| craft_atomic_write(&path, &pdf));
+        let result = sheet::board_sheet_pdf(&self.project, opts, font, index).and_then(|pdf| craft_atomic_write(path, &pdf));
         match result {
-            Ok(()) => self.status = tlf!("Wrote the board sheet {file} ({n} pages)", file = path.display(), n = sheet::page_count(&self.project, &opts)),
+            Ok(()) => self.status = tlf!("Wrote the board sheet {file} ({n} pages)", file = path.display(), n = sheet::page_count(&self.project, opts)),
             Err(e) => self.status = tlf!("Export failed: {error}", error = e),
         }
     }
@@ -581,118 +585,13 @@ impl BoardApp {
     // UI
     // ---------------------------------------------------------------------------------------
 
-    fn shortcuts(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input() {
-            return;
+    /// A menu entry for keymap command `id`, showing its current shortcut; runs it when clicked.
+    fn menu_item(&mut self, ui: &mut egui::Ui, label: impl Into<egui::WidgetText>, id: &str) -> egui::Response {
+        let r = ui.add(egui::Button::new(label).shortcut_text(self.shortcuts.chord(id)));
+        if r.clicked() {
+            crate::keys::run(self, id);
         }
-        use egui::{Key, KeyboardShortcut, Modifiers};
-        let cmd = |k| KeyboardShortcut::new(Modifiers::COMMAND, k);
-        let cmd_shift = |k| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, k);
-        // Shift variants first: egui matches Ctrl+S logically, so it would also eat Ctrl+Shift+S.
-        let (save_as, save, open, redo, undo, new_panel) = ctx.input_mut(|i| {
-            let save_as = i.consume_shortcut(&cmd_shift(Key::S));
-            let save = i.consume_shortcut(&cmd(Key::S));
-            let open = i.consume_shortcut(&cmd(Key::O));
-            let redo = i.consume_shortcut(&cmd_shift(Key::Z)) || i.consume_shortcut(&cmd(Key::Y));
-            let undo = i.consume_shortcut(&cmd(Key::Z));
-            (save_as, save, open, redo, undo, i.consume_shortcut(&cmd(Key::N)))
-        });
-        let (duplicate, settings) = ctx.input_mut(|i| (i.consume_shortcut(&cmd(Key::D)), i.consume_shortcut(&cmd(Key::Comma))));
-        if duplicate {
-            self.duplicate_panel();
-        }
-        if settings {
-            self.settings_dialog = Some(crate::settings::Dialog::new(&self.project));
-        }
-        if save_as {
-            self.save_as();
-        } else if save {
-            self.save();
-        }
-        if open {
-            self.open_dialog();
-        }
-        if redo {
-            self.redo();
-        } else if undo {
-            self.undo();
-        }
-        if new_panel {
-            self.add_panel();
-        }
-        let keys = ctx.input(|i| {
-            (
-                i.key_pressed(Key::Space),
-                i.key_pressed(Key::ArrowLeft),
-                i.key_pressed(Key::ArrowRight),
-                i.key_pressed(Key::V),
-                i.key_pressed(Key::B),
-                i.key_pressed(Key::E),
-                i.key_pressed(Key::C),
-                i.key_pressed(Key::OpenBracket),
-                i.key_pressed(Key::CloseBracket),
-                i.modifiers.is_none(),
-            )
-        });
-        let (space, left, right, tab, b, e, c, smaller, bigger, plain) = keys;
-        if !plain {
-            return;
-        }
-        // Space activates a focused button; it plays only when nothing has focus.
-        if space && ctx.memory(|m| m.focused().is_none()) {
-            self.toggle_play();
-        }
-        // Keyboard alternatives to dragging the playhead: , and . step a frame, Home goes to the start.
-        let (back, fwd, home) = ctx.input(|i| (i.key_pressed(Key::Comma), i.key_pressed(Key::Period), i.key_pressed(Key::Home)));
-        if back || fwd || home {
-            let last = self.project.total_frames().saturating_sub(1) as f64;
-            self.playhead = if home { 0.0 } else { (self.playhead.floor() + if fwd { 1.0 } else { -1.0 }).clamp(0.0, last) };
-            if let Some((id, _)) = self.project.panel_at(self.playhead as u64) {
-                self.select(Some(id));
-            }
-        }
-        // With a widget focused, arrows are egui's focus navigation and selection follows focus.
-        let nothing_focused = ctx.memory(|m| m.focused().is_none());
-        if left && nothing_focused {
-            self.step_selection(-1);
-        }
-        if right && nothing_focused {
-            self.step_selection(1);
-        }
-        if tab {
-            self.view = if self.view == View::Board { View::Panel } else { View::Board };
-        }
-        if b {
-            self.tool = CanvasTool::Brush;
-        }
-        let (onion, fit, zoom_in, zoom_out) =
-            ctx.input(|i| (i.key_pressed(Key::O), i.key_pressed(Key::Num0), i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals), i.key_pressed(Key::Minus)));
-        if onion {
-            self.onion = !self.onion;
-        }
-        if fit {
-            self.canvas_zoom = 1.0;
-            self.canvas_pan = egui::Vec2::ZERO;
-        }
-        if zoom_in {
-            self.canvas_zoom = (self.canvas_zoom * 1.25).min(16.0);
-        }
-        if zoom_out {
-            self.canvas_zoom = (self.canvas_zoom / 1.25).max(0.25);
-        }
-        if e {
-            self.tool = CanvasTool::Eraser;
-        }
-        if c {
-            self.tool = CanvasTool::Camera;
-        }
-        let r = if self.tool == CanvasTool::Eraser { &mut self.eraser_radius } else { &mut self.brush.radius };
-        if smaller {
-            *r = (*r / 1.25).max(0.5);
-        }
-        if bigger {
-            *r = (*r * 1.25).min(200.0);
-        }
+        r
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
@@ -702,16 +601,10 @@ impl BoardApp {
                     self.replace_project(Project::blank("Untitled board"), None);
                     self.settings_dialog = Some(crate::settings::Dialog::new(&self.project));
                 }
-                if ui.button(tl!("Open…")).clicked() {
-                    self.open_dialog();
-                }
+                self.menu_item(ui, tl!("Open…"), "file.open");
                 ui.separator();
-                if ui.button(tl!("Save")).clicked() {
-                    self.save();
-                }
-                if ui.button(tl!("Save As…")).clicked() {
-                    self.save_as();
-                }
+                self.menu_item(ui, tl!("Save"), "file.save");
+                self.menu_item(ui, tl!("Save As…"), "file.save_as");
                 ui.separator();
                 if ui
                     .button(tl!("Import Screenplay…"))
@@ -731,28 +624,10 @@ impl BoardApp {
                         }
                     }
                 });
-                if ui
-                    .button(tl!("Conform Timing from Edit…"))
-                    .on_hover_text(tl!("Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)"))
-                    .clicked()
-                {
-                    self.conform();
-                }
-                ui.menu_button(tl!("Export Board Sheet (PDF)"), |ui| {
-                    for (label, paper, c, r) in [
-                        (tl!("A4, 6 panels a page…"), sheet::Paper::A4, 3, 2),
-                        (tl!("A4, 3 panels a page…"), sheet::Paper::A4, 3, 1),
-                        (tl!("Letter, 6 panels a page…"), sheet::Paper::Letter, 3, 2),
-                        (tl!("Letter, 3 panels a page…"), sheet::Paper::Letter, 3, 1),
-                    ] {
-                        if ui.button(label).clicked() {
-                            self.export_sheet(paper, c, r);
-                        }
-                    }
-                });
-                if ui.button(tl!("Export Shot List (CSV)…")).clicked() {
-                    self.export_shot_list();
-                }
+                self.menu_item(ui, tl!("Conform Timing from Edit…"), "file.conform")
+                    .on_hover_text(tl!("Take panel durations, and optionally their order, from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)"));
+                self.menu_item(ui, tl!("Export Board Sheet (PDF)…"), "file.export_sheet");
+                self.menu_item(ui, tl!("Export Shot List (CSV)…"), "file.export_shot_list");
                 if ui.button(tl!("Export Panel Images (PNG)…")).clicked() {
                     self.export_pngs();
                 }
@@ -762,49 +637,32 @@ impl BoardApp {
                 }
             });
             ui.menu_button(tl!("Edit"), |ui| {
-                if ui.add_enabled(self.history.can_undo(), egui::Button::new(tl!("Undo")).shortcut_text("Ctrl+Z")).clicked() {
-                    self.undo();
-                }
-                if ui.add_enabled(self.history.can_redo(), egui::Button::new(tl!("Redo")).shortcut_text("Ctrl+Shift+Z")).clicked() {
-                    self.redo();
+                ui.add_enabled_ui(self.history.can_undo(), |ui| self.menu_item(ui, tl!("Undo"), "edit.undo"));
+                ui.add_enabled_ui(self.history.can_redo(), |ui| self.menu_item(ui, tl!("Redo"), "edit.redo"));
+                ui.separator();
+                for (label, id) in [
+                    (tl!("New Panel"), "edit.new_panel"),
+                    (tl!("Duplicate Panel"), "edit.duplicate_panel"),
+                    (tl!("New Scene"), "edit.new_scene"),
+                    (tl!("Delete Panel"), "edit.delete_panel"),
+                ] {
+                    self.menu_item(ui, label, id);
                 }
                 ui.separator();
-                if ui.add(egui::Button::new(tl!("New Panel")).shortcut_text("Ctrl+N")).clicked() {
-                    self.add_panel();
-                }
-                if ui.add(egui::Button::new(tl!("Duplicate Panel")).shortcut_text("Ctrl+D")).clicked() {
-                    self.duplicate_panel();
-                }
-                if ui.button(tl!("New Scene")).clicked() {
-                    self.add_scene();
-                }
-                if ui.button(tl!("Delete Panel")).clicked() {
-                    self.delete_panel();
-                }
+                self.menu_item(ui, tl!("Move Panel Earlier"), "edit.move_earlier");
+                self.menu_item(ui, tl!("Move Panel Later"), "edit.move_later");
                 ui.separator();
-                if ui.button(tl!("Move Panel Earlier")).clicked() {
-                    self.move_panel(false);
-                }
-                if ui.button(tl!("Move Panel Later")).clicked() {
-                    self.move_panel(true);
-                }
-                ui.separator();
-                if ui.add(egui::Button::new(tl!("Board Settings…")).shortcut_text("Ctrl+,")).clicked() {
-                    self.settings_dialog = Some(crate::settings::Dialog::new(&self.project));
-                }
+                self.menu_item(ui, tl!("Board Settings…"), "edit.board_settings");
+                self.menu_item(ui, tl!("Keyboard Shortcuts…"), "edit.keyboard_shortcuts");
             });
             ui.menu_button(tl!("View"), |ui| {
                 ui.radio_value(&mut self.view, View::Board, tl!("Board (panel grid)"));
                 ui.radio_value(&mut self.view, View::Panel, tl!("Panel (draw and camera)"));
                 ui.separator();
-                if ui.button(if self.playing { tl!("Pause Animatic") } else { tl!("Play Animatic") }).clicked() {
-                    self.toggle_play();
-                }
-                ui.checkbox(&mut self.onion, tl!("Onion Skin (O)"));
-                if ui.button(tl!("Fit Canvas (0)")).clicked() {
-                    self.canvas_zoom = 1.0;
-                    self.canvas_pan = egui::Vec2::ZERO;
-                }
+                self.menu_item(ui, if self.playing { tl!("Pause Animatic") } else { tl!("Play Animatic") }, "view.play");
+                let onion = self.shortcuts.chord("view.onion");
+                ui.checkbox(&mut self.onion, if onion.is_empty() { tl!("Onion Skin").to_string() } else { format!("{} ({onion})", tl!("Onion Skin")) });
+                self.menu_item(ui, tl!("Fit Canvas"), "view.fit");
                 ui.separator();
                 ui.menu_button(tl!("Language"), |ui| {
                     if ui.radio(self.language.is_none(), tl!("System")).clicked() {
@@ -1009,7 +867,7 @@ impl BoardApp {
 
     fn draw_inner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let ctx = ctx.clone();
-        self.shortcuts(&ctx);
+        crate::keys::handle(self, &ctx);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1035,6 +893,8 @@ impl BoardApp {
         self.close_dialog(&ctx);
         self.recovery_dialog(&ctx);
         crate::settings::show(self, &ctx);
+        crate::sheet_dialog::show(self, &ctx);
+        crate::conform_dialog::show(self, &ctx);
         crate::external::poll(self, &ctx);
         self.screenshot_step(&ctx);
     }

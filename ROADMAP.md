@@ -56,8 +56,9 @@ English only until craft-i18n has `locales/<locale>/boardcraft.tsv`. See
 
 ## Agents: CLI and MCP
 
-`boardcraft-cli` runs every board command headless ([docs/cli.md](docs/cli.md)). An MCP server
-over the same commands is planned.
+`boardcraft-cli` runs every board command headless ([docs/cli.md](docs/cli.md)), and
+`boardcraft-cli mcp` serves them, with import, conform and the exports, as MCP tools
+([docs/mcp.md](docs/mcp.md)). A live channel into the running app is planned.
 
 ## Progress log
 

@@ -18,10 +18,13 @@ mod args;
 mod autosave;
 mod board;
 mod canvas;
+mod conform_dialog;
 mod external;
 mod history;
 mod inspector;
+mod keys;
 mod settings;
+mod sheet_dialog;
 mod textures;
 mod timeline;
 #[cfg(test)]

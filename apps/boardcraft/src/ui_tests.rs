@@ -277,3 +277,161 @@ fn duplicate_onion_zoom_and_shot_presets() {
     assert_ne!(copy, id);
     assert_eq!(h.state().project.panel(copy).unwrap().shot, h.state().project.panel(id).unwrap().shot);
 }
+
+/// A harness on its own data folder (for settings that persist).
+fn harness_in(data: &std::path::Path) -> Harness<'static, BoardApp> {
+    let ctx = egui::Context::default();
+    let app = BoardApp::with_context(&ctx, Cli { demo: true, view: StartView::Board, data_dir: Some(data.to_path_buf()), ..Default::default() });
+    Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_ui_state(
+        |ui, app: &mut BoardApp| {
+            let ctx = ui.ctx().clone();
+            app.tick(&ctx);
+            app.draw(ui);
+        },
+        app,
+    )
+}
+
+/// Open a menu and activate one of its entries from the keyboard.
+fn menu_entry(h: &mut Harness<'static, BoardApp>, menu: &str, entry: &str) {
+    h.get_by_label(menu).click();
+    h.run();
+    h.get_by_label_contains(entry).focus();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+}
+
+#[test]
+fn a_remapped_shortcut_runs_and_is_kept() {
+    let data = std::env::temp_dir().join(format!("boardcraft-ui-keys-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    let mut h = harness_in(&data);
+    h.run();
+    assert_eq!(h.state().shortcuts.chord("edit.duplicate_panel"), "Ctrl+D");
+    menu_entry(&mut h, "Edit", "Keyboard Shortcuts…");
+    assert!(h.state().shortcuts.dialog.is_some(), "Edit ▸ Keyboard Shortcuts… opens the dialog");
+    // Select Duplicate Panel, Enter records, the chord pressed is assigned.
+    // The inspector has a Duplicate Panel button too; the dialog's row is drawn last.
+    h.get_all_by_role_and_label(egui::Role::Button, "Duplicate Panel").last().unwrap().click();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::D);
+    h.run();
+    let ok = h.get_by_label("OK");
+    ok.focus();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+    h.run();
+    assert!(h.state().shortcuts.dialog.is_none(), "OK closes the dialog");
+    assert_eq!(h.state().shortcuts.chord("edit.duplicate_panel"), "Ctrl+Shift+D", "menus show the new chord");
+    // The new chord duplicates; the old one no longer does.
+    let n = h.state().project.panel_count();
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::D);
+    h.run();
+    assert_eq!(h.state().project.panel_count(), n + 1);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::D);
+    h.run();
+    assert_eq!(h.state().project.panel_count(), n + 1, "Ctrl+D was replaced");
+    // Kept in config.toml in the data folder, and read back by the next session.
+    let config = std::fs::read_to_string(data.join("config.toml")).unwrap_or_default();
+    assert!(config.contains("Cmd+Shift+D"), "{config}");
+    let mut again = harness_in(&data);
+    again.run();
+    assert_eq!(again.state().shortcuts.chord("edit.duplicate_panel"), "Ctrl+Shift+D");
+    let _ = std::fs::remove_dir_all(&data);
+}
+
+#[test]
+fn single_key_shortcuts_wait_while_typing() {
+    let mut h = harness(StartView::Board);
+    h.run();
+    h.get_by_label("Notes").focus();
+    h.run();
+    h.get_by_label("Notes").type_text("bv");
+    h.run();
+    assert_eq!(h.state().view, View::Board, "V typed into the field");
+    assert_eq!(h.state().tool, CanvasTool::Brush);
+    let id = h.state().selected.unwrap();
+    assert!(h.state().project.panel(id).unwrap().notes.ends_with("bv"));
+}
+
+#[test]
+fn board_sheet_options_by_keyboard() {
+    let mut h = harness(StartView::Board);
+    h.run();
+    menu_entry(&mut h, "File", "Export Board Sheet (PDF)…");
+    assert!(h.state().sheet_dialog.is_some());
+    let out = std::env::temp_dir().join(format!("boardcraft-ui-sheet-{}.pdf", std::process::id()));
+    h.state_mut().sheet_dialog.as_mut().unwrap().path = Some(out.clone());
+    // Paper takes focus first; Letter, then fields off and ruled lines on, all by keyboard.
+    assert!(h.get_by_label("A4").is_focused());
+    for (role, label) in [(egui::Role::RadioButton, "Letter"), (egui::Role::CheckBox, "Notes"), (egui::Role::CheckBox, "Ruled lines for handwritten notes")] {
+        // The inspector's Notes field shares the name; the option is a check box.
+        h.get_by_role_and_label(role, label).focus();
+        h.run();
+        h.key_press(egui::Key::Space);
+        h.run();
+    }
+    h.get_by_label("Header text").focus();
+    h.run();
+    h.get_by_label("Header text").type_text("Episode 4");
+    h.run();
+    let export = h.get_by_label("Export…");
+    export.focus();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+    let o = &h.state().sheet_options;
+    assert_eq!(o.paper, boardcraft_core::sheet::Paper::Letter);
+    assert!(!o.fields.notes && o.fields.dialogue && o.note_lines);
+    assert_eq!(o.header, "Episode 4");
+    assert!(h.state().sheet_dialog.is_none());
+    assert!(std::fs::read(&out).unwrap().starts_with(b"%PDF-"), "{}", h.state().status);
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn conform_shows_what_changes_before_applying() {
+    use boardcraft_core::command::{self, Command};
+    let mut h = harness(StartView::Board);
+    h.run();
+    // An editor swapped the first two panels and cut the third.
+    let mut edit = h.state().project.clone();
+    let first = edit.scenes[0].panels[0].id;
+    let third = edit.scenes[0].panels[2].id;
+    command::apply(&mut edit, &Command::MovePanel { panel: first, later: true }).unwrap();
+    command::apply(&mut edit, &Command::DeletePanel { panel: third }).unwrap();
+    let (otio, _) = boardcraft_core::timeline::document(&edit, boardcraft_core::timeline::TimelineFormat::Otio, std::path::Path::new("/x")).unwrap();
+    h.state_mut().conform_dialog = Some(crate::conform_dialog::Dialog::new("cut.otio".into(), otio));
+    h.run();
+    h.run();
+    assert!(h.query_by_label_contains("panels are not in the edit").is_some());
+    // The first option has focus: Space takes the edit's order; then mark the cut panel.
+    assert!(h.get_by_label("Put panels in the edit's order").is_focused());
+    h.key_press(egui::Key::Space);
+    h.run();
+    h.get_by_label("Mark panels the edit leaves out (nothing is deleted)").focus();
+    h.run();
+    h.key_press(egui::Key::Space);
+    h.run();
+    assert!(h.query_by_label_contains("panels change place").is_some(), "the summary follows the options");
+    assert_eq!(h.state().project.scenes[0].panels[0].id, first, "nothing changes before Apply");
+    let apply = h.get_by_label("Apply");
+    apply.focus();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+    // The edit's order; the cut panel stays after the panel it followed on the board.
+    let p = &h.state().project;
+    let order: Vec<_> = p.scenes[0].panels.iter().map(|x| x.id).collect();
+    assert_eq!(&order[..3], &[edit.scenes[0].panels[0].id, third, first], "{order:?}");
+    assert!(boardcraft_core::timeline::is_marked_missing(&p.panel(third).unwrap().notes));
+    assert!(h.state().conform_dialog.is_none());
+    // One undo step puts it all back.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    h.run();
+    assert_eq!(h.state().project.scenes[0].panels[0].id, first);
+}

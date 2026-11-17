@@ -292,6 +292,16 @@ fn source_strings() -> Vec<String> {
     let mut out = std::collections::BTreeSet::new();
     for f in files.iter().filter(|f| f.extension().is_some_and(|e| e == "rs") && !f.ends_with("ui_tests.rs")) {
         let Ok(text) = std::fs::read_to_string(f) else { continue };
+        // The shortcut catalog (keys.rs) translates its labels and menu names at run time:
+        // `e("id", "Label", "Menu", &[…])` lines.
+        for line in text.lines().map(str::trim).filter(|l| l.starts_with("e(\"")) {
+            let quoted: Vec<&str> = line.split('"').collect();
+            for i in [3, 5] {
+                if let Some(s) = quoted.get(i) {
+                    out.insert(s.to_string());
+                }
+            }
+        }
         for pat in ["tl!(\"", "tlf!(\""] {
             let mut rest = text.as_str();
             while let Some(i) = rest.find(pat) {
