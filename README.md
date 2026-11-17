@@ -47,13 +47,19 @@ time the panels and play the animatic, then send the cut to FilmCraft.
   plus cut, copy, paste and delete; **Fill** with tolerance, gap closing and sampling of the layer or
   all visible layers. Every drawing tool is one undo step. **Edit in Image Editor** sends a layer to GIMP, Krita, Photoshop or any editor and reloads it
   when you save there.
+- **Annotations.** Editable vector shapes over the drawing: freehand vector strokes, straight
+  arrows, curved motion arrows and broad camera-move arrows. Select, move, nudge, bend, recolour
+  and delete them (mouse or keyboard); they print on sheets and stills and go out and come back as
+  SVG.
 - **Board Settings.** Change the frame size and aspect ratio (16:9, 1.85, 2.39, 4:3, 1:1, 9:16,
   4:5) and the frame rate (23.976 to 60 fps) at any time, without stretching drawings or losing
   timing.
 - **Panel text.** Shot type (with presets), dialogue, action and notes per panel; duplicate panels.
 - **Timing.** Each panel has a duration in frames; drag a panel's edge on the timeline to retime it.
-- **Camera.** Pan and zoom keyframes per panel (start and end), eased, edited by dragging and
-  scrolling in the Panel view; the camera frames are drawn over the drawing.
+- **Camera.** Pan, zoom and rotation keyframes per panel, as many as you like, eased. A key strip
+  under the canvas adds, selects, moves and deletes keys at frames (pointer or keyboard); the
+  Camera tool drags, zooms and turns the selected key; typed fields for every value. A turned
+  frame zooms in just enough to stay on the drawing.
 - **Views.** Board view (thumbnail grid grouped by scene), Panel view (canvas, tools, camera), and
   a timeline strip with scene bands, thumbnails and a playhead.
 - **Animatic playback.** Plays the panels for their durations at the project rate through each
@@ -72,14 +78,16 @@ time the panels and play the animatic, then send the cut to FilmCraft.
   by their stable id keep their drawings, cameras and timing and take the new text; new scenes are
   added, removed ones kept and reported.
 - **Timeline export.** The animatic as OpenTimelineIO, CMX 3600 EDL, Final Cut Pro 7 XML or FCPXML,
-  with rendered panel stills, the sound clips on audio tracks and scene markers (through craft-timeline). All four verified with
-  FilmCraft's own importers.
+  with rendered panel stills, the sound clips on audio tracks and scene markers (through
+  craft-timeline). Camera moves travel as Motion keyframes (position, scale, rotation) on the
+  full-canvas still, so FilmCraft and other editors replay them. All four verified with FilmCraft's
+  own importers.
 - **Conform.** Read an editor's cut back (any of the four) and take its panel timing; optionally
   also its panel order and a note on panels it leaves out, after a summary of what changes.
 - **Board sheets.** Printable PDF pages (A4 or Letter, any grid up to 6×6) with each panel's
-  picture, number, duration, scene heading and the fields you choose (shot, dialogue, action,
-  notes), an optional header line and ruled lines for handwritten notes, as selectable text
-  (craft-pdf).
+  picture (annotations included), number, duration, scene heading and the fields you choose (shot,
+  dialogue, action, notes), an optional header line and ruled lines for handwritten notes, as
+  selectable text (craft-pdf).
 - **Keyboard shortcuts.** Every shortcut can be changed in Edit ▸ Keyboard Shortcuts… (the shared
   craft-keymap dialog); menus show the current keys and changes are kept per user.
 - **Shot list.** CSV with scene, panel, shot, start timecode, duration and text.
@@ -119,6 +127,10 @@ cargo run --release -p boardcraft -- my.boardcraft   # open a project
 | V | Board view ↔ Panel view |
 | B / E / C | brush / eraser / camera tool |
 | L / M / G | lasso / rectangle select / fill tool |
+| Shift+S / P / A / Shift+M / Shift+A | select annotations / vector pen / arrow / motion arrow / camera arrow |
+| Delete | delete the selected annotation (or the focused camera key) |
+| K | camera key at the playhead (Panel view) |
+| ← → / Shift+← → on a camera key | previous / next key; move the key a frame |
 | [ ] | smaller / larger brush |
 | Ctrl+A | select the whole layer |
 | ← → ↑ ↓ (Shift: 10 px) | with a selection: move it |

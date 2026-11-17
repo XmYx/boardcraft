@@ -11,7 +11,9 @@
 //! - [`fill`]: bucket fill with tolerance and gap closing.
 //! - [`audio`]: the sound clips under the animatic: decoding (craft-audio), waveforms, mixing, and
 //!   clips anchored to panels that follow them when the board is retimed.
-//! - [`camera`]: camera keyframes and the eased pan/zoom between them.
+//! - [`camera`]: camera keyframes and the eased pan, zoom and rotation between them.
+//! - [`annotate`]: vector annotations (strokes, arrows, motion and camera arrows), drawn over the
+//!   layers and exchanged as SVG.
 //! - [`fountain`]: Fountain screenplay import (scene headings, action, dialogue), the hand-off from
 //!   ScriptCraft.
 //! - [`script`]: screenplays in Fountain, Final Draft (`.fdx`) and ScriptCraft's scene list (JSON),
@@ -33,6 +35,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
 pub mod ai;
+pub mod annotate;
 pub mod audio;
 pub mod camera;
 pub mod command;
@@ -53,7 +56,8 @@ pub mod stills;
 pub mod text;
 pub mod timeline;
 
-pub use camera::{Camera, CameraKey, ViewRect};
+pub use annotate::{Shape, ShapeKind};
+pub use camera::{Camera, CameraKey, ViewQuad, ViewRect};
 pub use error::{Error, Result};
 pub use model::{Id, Layer, Panel, Project, Scene, Settings};
 pub use raster::{Brush, Raster, StrokePoint, Tool};

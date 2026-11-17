@@ -11,7 +11,7 @@
 //! | `thumbnail.png` | the first panel at 320 px wide, for file browsers (not read back) |
 //!
 //! ```json
-//! { "format": "boardcraft.project", "schema_version": 1, "generator": "BoardCraft 0.1.0",
+//! { "format": "boardcraft.project", "schema_version": 2, "generator": "BoardCraft 0.1.0",
 //!   "project": { "name": "…", "settings": { "width": 1280, "height": 720, "fps": 24 },
 //!                "scenes": [ { "id": 2, "number": "1", "heading": "INT. …", "source_scene_id": "",
 //!                              "panels": [ { "id": 3, "duration": 48, "dialogue": "…", "action": "…",
@@ -23,9 +23,11 @@
 //!
 //! The full description is `docs/file-format.md`. Every number read from a file is validated:
 //! the canvas size and rate must be in range, ids are de-duplicated, durations clamped, camera keys
-//! sorted and clamped, and layer PNGs of the wrong size are resampled.
+//! sorted and clamped, annotations cleaned, and layer PNGs of the wrong size are resampled.
 
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Weak};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -41,7 +43,10 @@ pub const MIME_TYPE: &str = "application/vnd.storytold.boardcraft+zip";
 /// File extension.
 pub const EXTENSION: &str = "boardcraft";
 /// Schema this build writes and the newest it reads.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// Schema 2 added camera key `rotation` and panel `annotations`. A schema-1 file reads as is (both
+/// default to nothing); schema 1 builds refuse schema 2 files rather than drop those fields.
+pub const SCHEMA_VERSION: u32 = 2;
 
 const MAX_ENTRIES: u64 = 200_000;
 const MAX_TOTAL_BYTES: u64 = 8 << 30;
@@ -71,20 +76,72 @@ fn zip_err(e: craft_zip::Error) -> Error {
     Error::Format(e.to_string())
 }
 
+/// Encoded layer PNGs kept between saves of the same board (incremental save).
+///
+/// Entries are keyed by layer id and remember the layer's pixel buffer through
+/// [`Raster::buffer_key`]: pixels are copy-on-write, so a layer nobody painted since the last save
+/// still has the same buffer and its PNG is reused instead of encoded again. The cache never keeps
+/// pixels alive, only the encoded bytes (or the fact that the layer is blank).
+#[derive(Default)]
+pub struct EncodeCache {
+    entries: HashMap<crate::model::Id, (Weak<Vec<u8>>, Option<Arc<Vec<u8>>>)>,
+    /// Layers whose PNG was reused / encoded by the last save.
+    pub reused: usize,
+    pub encoded: usize,
+}
+
+impl EncodeCache {
+    /// Number of layers remembered.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Bytes of encoded PNG held.
+    pub fn bytes(&self) -> usize {
+        self.entries.values().filter_map(|(_, png)| png.as_ref().map(|p| p.len())).sum()
+    }
+
+    /// The layer's PNG (`None` = blank layer, nothing to store), from the cache when its pixels are
+    /// unchanged.
+    fn png(&mut self, layer: &crate::model::Layer) -> Result<Option<Arc<Vec<u8>>>> {
+        if let Some((key, png)) = self.entries.get(&layer.id)
+            && layer.pixels.is_buffer(key)
+        {
+            self.reused += 1;
+            return Ok(png.clone());
+        }
+        self.encoded += 1;
+        let png = if layer.pixels.is_empty() || layer.pixels.is_blank() { None } else { Some(Arc::new(layer.pixels.to_png()?)) };
+        self.entries.insert(layer.id, (layer.pixels.buffer_key(), png.clone()));
+        Ok(png)
+    }
+}
+
 /// Serialize a project to `.boardcraft` bytes.
 pub fn to_bytes(project: &Project) -> Result<Vec<u8>> {
+    to_bytes_cached(project, &mut EncodeCache::default())
+}
+
+/// [`to_bytes`], reusing the PNGs of layers unchanged since the last save through `cache`.
+pub fn to_bytes_cached(project: &Project, cache: &mut EncodeCache) -> Result<Vec<u8>> {
+    cache.reused = 0;
+    cache.encoded = 0;
     let mut w = craft_zip::Writer::new();
     w.add("mimetype", MIME_TYPE.as_bytes(), craft_zip::Compression::Stored).map_err(zip_err)?;
     let json = serde_json::to_vec_pretty(&EnvelopeOut { format: FORMAT_ID, schema_version: SCHEMA_VERSION, generator: crate::GENERATOR, project })
         .map_err(|e| Error::Format(e.to_string()))?;
     w.add("project.json", &json, craft_zip::Compression::Deflated).map_err(zip_err)?;
+    let mut live = std::collections::HashSet::new();
     for (_, panel) in project.panels() {
         for layer in &panel.layers {
-            if layer.pixels.is_empty() || layer.pixels.is_blank() {
-                continue;
-            }
+            live.insert(layer.id);
+            let Some(png) = cache.png(layer)? else { continue };
             // PNG is compressed already.
-            w.add(&layer_entry(layer.id), &layer.pixels.to_png()?, craft_zip::Compression::Stored).map_err(zip_err)?;
+            w.add(&layer_entry(layer.id), &png, craft_zip::Compression::Stored).map_err(zip_err)?;
         }
     }
     for clip in &project.audio {
@@ -99,6 +156,7 @@ pub fn to_bytes(project: &Project) -> Result<Vec<u8>> {
         };
         w.add(&clip.entry_name(), &clip.data, how).map_err(zip_err)?;
     }
+    cache.entries.retain(|id, _| live.contains(id));
     if let Some((_, first)) = project.panels().next() {
         let thumb = first.composite(&project.settings);
         let h = (320.0 * thumb.height() as f32 / thumb.width().max(1) as f32).round().max(1.0) as u32;
@@ -124,7 +182,8 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Project> {
     if env.schema_version == 0 {
         return Err(Error::Format("schema_version 0".into()));
     }
-    // Migrations from older schemas go here (none yet: schema 1 is the first).
+    // Migrations from older schemas go here. 1 → 2 needs no step: schema 2 only added optional
+    // fields (camera key `rotation`, panel `annotations`) that default to nothing.
     let mut project: Project = serde_json::from_value(env.project).map_err(|e| Error::Format(format!("project: {e}")))?;
     if !project.settings.is_valid() {
         let s = project.settings;
@@ -154,7 +213,12 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Project> {
 
 /// Save atomically: a failed save leaves the previous file untouched.
 pub fn save(project: &Project, path: &Path) -> Result<()> {
-    let bytes = to_bytes(project)?;
+    save_cached(project, path, &mut EncodeCache::default())
+}
+
+/// [`save`], reusing unchanged layers' PNGs through `cache` (autosave, repeated saves).
+pub fn save_cached(project: &Project, path: &Path, cache: &mut EncodeCache) -> Result<()> {
+    let bytes = to_bytes_cached(project, cache)?;
     craft_atomic::atomic_write(path, &bytes).map_err(|e| Error::io(path, e))
 }
 
@@ -185,7 +249,12 @@ mod tests {
         let panel = p.panel_mut(id).unwrap();
         panel.dialogue = "BOB: Hi ünïcödé".into();
         panel.duration = 31;
-        panel.camera.set_key(CameraKey { frame: 30, center: [0.6, 0.5], zoom: 2.0 });
+        panel.camera.set_key(CameraKey { frame: 30, center: [0.6, 0.5], zoom: 2.0, rotation: 12.5 });
+        panel.annotations.push(crate::annotate::Shape::new(
+            crate::annotate::ShapeKind::MotionArrow { from: [5.0, 30.0], via: [30.0, 2.0], to: [58.0, 28.0] },
+            [200, 30, 30, 255],
+            2.0,
+        ));
         panel.layers[0].pixels.polyline(&[(4.0, 4.0), (60.0, 30.0)], &Brush::default());
         p
     }
@@ -261,6 +330,93 @@ mod tests {
             }
             let _ = std::panic::catch_unwind(|| from_bytes(&m)).expect("bit flip panicked");
         }
+    }
+
+    #[test]
+    fn schema_1_files_read_as_schema_2() {
+        // A schema-1 envelope as 0.1.0 wrote it: camera keys without rotation, no annotations.
+        let json = r#"{"format":"boardcraft.project","schema_version":1,"generator":"BoardCraft 0.1.0","project":{"name":"Old","settings":{"width":32,"height":18,"fps":24},
+            "scenes":[{"id":1,"number":"1","heading":"INT. A","source_scene_id":"","panels":[{"id":2,"duration":24,"dialogue":"","action":"","notes":"",
+            "layers":[{"id":3,"name":"Sketch","visible":true,"opacity":1.0}],"camera":{"keys":[{"frame":0,"center":[0.5,0.5],"zoom":1.0},{"frame":23,"center":[0.6,0.5],"zoom":2.0}]}}]}],"next_id":4}}"#;
+        let mut w = craft_zip::Writer::new();
+        w.add("project.json", json.as_bytes(), craft_zip::Compression::Deflated).unwrap();
+        let p = from_bytes(&w.finish().unwrap()).unwrap();
+        let panel = &p.scenes[0].panels[0];
+        assert_eq!(panel.camera.keys.len(), 2);
+        assert!(panel.camera.keys.iter().all(|k| k.rotation == 0.0));
+        assert!(panel.annotations.is_empty());
+        // Saved again, it is schema 2.
+        let again = to_bytes(&p).unwrap();
+        let mut zip = craft_zip::Archive::open(&again, craft_zip::Limits { max_entries: 10, max_total_bytes: 1 << 20 }).unwrap();
+        let text = String::from_utf8(zip.read("project.json", 1 << 20).unwrap().unwrap()).unwrap();
+        assert!(text.contains("\"schema_version\": 2"), "{text}");
+        assert!(!text.contains("annotations"), "empty annotations are not written");
+    }
+
+    #[test]
+    fn incremental_save_reuses_unchanged_layers() {
+        let mut p = sample();
+        let mut cache = EncodeCache::default();
+        let first = to_bytes_cached(&p, &mut cache).unwrap();
+        assert_eq!(cache.reused, 0);
+        let layers = cache.encoded;
+        assert!(layers >= 2);
+        // Nothing changed: every layer is reused and the file is the same.
+        assert_eq!(to_bytes_cached(&p, &mut cache).unwrap(), first);
+        assert_eq!((cache.reused, cache.encoded), (layers, 0));
+        // A snapshot (as autosave takes) shares the buffers, so it reuses too.
+        let snapshot = p.clone();
+        to_bytes_cached(&snapshot, &mut cache).unwrap();
+        assert_eq!(cache.encoded, 0);
+        // Paint one layer: only it is encoded again, and the file reads back with the new paint.
+        let id = p.scenes[0].panels[1].id;
+        p.panel_mut(id).unwrap().layers[0].pixels.polyline(&[(1.0, 30.0), (60.0, 2.0)], &Brush::default());
+        let bytes = to_bytes_cached(&p, &mut cache).unwrap();
+        assert_eq!((cache.reused, cache.encoded), (layers - 1, 1));
+        assert_eq!(from_bytes(&bytes).unwrap(), p);
+        // Deleted layers leave the cache.
+        p.scenes[0].panels.truncate(1);
+        to_bytes_cached(&p, &mut cache).unwrap();
+        assert_eq!(cache.len(), p.panels().map(|(_, x)| x.layers.len()).sum::<usize>());
+    }
+
+    /// A 300-panel board with two painted layers a panel: the second save of an unchanged board
+    /// encodes nothing, an edit re-encodes one layer, and the cache holds only compressed bytes.
+    #[test]
+    fn large_board_saves_stay_bounded() {
+        let mut p = Project::new("Large");
+        p.settings.width = 160;
+        p.settings.height = 90;
+        let s = p.add_scene("INT. LONG");
+        for i in 0..300 {
+            let id = p.add_panel(s, None).unwrap();
+            let layer = p.new_layer("Ink");
+            let panel = p.panel_mut(id).unwrap();
+            panel.layers.push(layer);
+            let y = (i % 80) as f32 + 5.0;
+            for l in &mut panel.layers {
+                l.pixels.polyline(&[(5.0, y), (150.0, 90.0 - y)], &Brush::default());
+            }
+        }
+        let mut cache = EncodeCache::default();
+        let t = std::time::Instant::now();
+        let full = to_bytes_cached(&p, &mut cache).unwrap();
+        let first = t.elapsed();
+        assert_eq!(cache.encoded, 600);
+        let t = std::time::Instant::now();
+        let again = to_bytes_cached(&p, &mut cache).unwrap();
+        let second = t.elapsed();
+        assert_eq!(cache.encoded, 0);
+        assert_eq!(again.len(), full.len());
+        // Reusing must be much cheaper than encoding (generous bound for slow CI machines).
+        assert!(second < first, "incremental save {second:?} vs full {first:?}");
+        let id = p.scenes[0].panels[150].id;
+        p.panel_mut(id).unwrap().layers[1].pixels.polyline(&[(1.0, 1.0), (100.0, 80.0)], &Brush::default());
+        to_bytes_cached(&p, &mut cache).unwrap();
+        assert_eq!(cache.encoded, 1);
+        // The cache keeps encoded bytes, never pixels: far below the raw layer memory.
+        let raw = 600 * 160 * 90 * 4;
+        assert!(cache.bytes() < raw / 4, "cache {} bytes vs {raw} raw", cache.bytes());
     }
 
     #[test]

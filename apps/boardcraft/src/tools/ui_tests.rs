@@ -73,10 +73,60 @@ fn tool_keys_pick_the_tools() {
     assert_eq!(h.state().tool, CanvasTool::RectSelect);
     key(&mut h, Key::G);
     assert_eq!(h.state().tool, CanvasTool::Fill);
+    // The annotation tools have their own keys, clear of L and M.
+    for (m, k, tool) in [
+        (Modifiers::SHIFT, Key::S, CanvasTool::Select),
+        (Modifiers::NONE, Key::P, CanvasTool::Pen),
+        (Modifiers::NONE, Key::A, CanvasTool::Arrow),
+        (Modifiers::SHIFT, Key::M, CanvasTool::MotionArrow),
+        (Modifiers::SHIFT, Key::A, CanvasTool::CameraArrow),
+    ] {
+        key_mod(&mut h, m, k);
+        assert_eq!(h.state().tool, tool, "{m:?}+{k:?}");
+    }
     // The toolbar shows each as a selectable button with its name.
     let _ = h.get(By::new().label("Lasso"));
     let _ = h.get(By::new().label("Rectangle select"));
     let _ = h.get(By::new().label("Fill"));
+    let _ = h.get(By::new().label("Select shape"));
+    let _ = h.get(By::new().label("Vector pen"));
+    // They are keymap commands, so they can be remapped.
+    for id in [
+        "tool.lasso",
+        "tool.rect_select",
+        "tool.fill",
+        "tool.select_shape",
+        "tool.vector_pen",
+        "tool.arrow",
+        "tool.motion_arrow",
+        "tool.camera_arrow",
+        "camera.add_key",
+    ] {
+        assert!(!h.state().shortcuts.chord(id).is_empty(), "{id}");
+    }
+}
+
+#[test]
+fn arrows_follow_the_rotated_view() {
+    let mut h = harness(StartView::Panel);
+    h.run();
+    h.state_mut().tools.view_angle = 90.0;
+    key(&mut h, Key::A);
+    assert_eq!(h.state().tool, CanvasTool::Arrow);
+    let id = h.state().selected.unwrap();
+    let n = h.state().project.panel(id).unwrap().annotations.len();
+    // Let the toolbar settle so the canvas stays put.
+    h.run();
+    // Drag between two canvas points, found on screen through the rotated view (within a few
+    // pixels: pointer positions are whole screen points).
+    let xf = h.state().tools.last_view.unwrap();
+    let (from, to) = ([500.0, 300.0], [500.0, 450.0]);
+    drag(&mut h, &[xf.to_screen(from), xf.to_screen([500.0, 375.0]), xf.to_screen(to)]);
+    let shapes = h.state().project.panel(id).unwrap().annotations.clone();
+    assert_eq!(shapes.len(), n + 1);
+    let boardcraft_core::ShapeKind::Arrow { from: a, to: b } = shapes[n].kind else { panic!("{:?}", shapes[n].kind) };
+    assert!((a[0] - from[0]).abs() < 4.0 && (a[1] - from[1]).abs() < 4.0, "{a:?}");
+    assert!((b[0] - to[0]).abs() < 4.0 && (b[1] - to[1]).abs() < 4.0, "{b:?}");
 }
 
 #[test]

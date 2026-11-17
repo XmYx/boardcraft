@@ -52,13 +52,6 @@ impl ViewXf {
         mesh.indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
         painter.add(egui::Shape::mesh(mesh));
     }
-
-    /// Outline a normalized view rectangle `[x0, y0, x1, y1]` (camera frames).
-    pub fn outline_normalized(&self, painter: &egui::Painter, v: [f32; 4], stroke: egui::Stroke) {
-        let (w, h) = (self.size.x, self.size.y);
-        let pts = [[v[0] * w, v[1] * h], [v[2] * w, v[1] * h], [v[2] * w, v[3] * h], [v[0] * w, v[3] * h]];
-        painter.add(egui::Shape::closed_line(pts.iter().map(|p| self.to_screen(*p)).collect(), stroke));
-    }
 }
 
 #[cfg(test)]

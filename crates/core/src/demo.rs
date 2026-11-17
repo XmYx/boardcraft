@@ -167,12 +167,19 @@ pub fn demo_project() -> Project {
         let end = panel.duration.saturating_sub(1);
         match n {
             0 => {
-                panel.camera.set_key(CameraKey { frame: 0, center: [0.5, 0.5], zoom: 1.0 });
-                panel.camera.set_key(CameraKey { frame: end, center: [0.38, 0.55], zoom: 1.6 });
+                panel.camera.set_key(CameraKey { frame: 0, center: [0.5, 0.5], zoom: 1.0, rotation: 0.0 });
+                panel.camera.set_key(CameraKey { frame: end, center: [0.38, 0.55], zoom: 1.6, rotation: 0.0 });
             }
             3 => {
-                panel.camera.set_key(CameraKey { frame: 0, center: [0.3, 0.45], zoom: 1.5 });
-                panel.camera.set_key(CameraKey { frame: end, center: [0.62, 0.45], zoom: 1.5 });
+                // A pan that settles into a slight tilt, with a hold in the middle (three keys).
+                panel.camera.set_key(CameraKey { frame: 0, center: [0.3, 0.45], zoom: 1.5, rotation: 0.0 });
+                panel.camera.set_key(CameraKey { frame: end / 2, center: [0.5, 0.45], zoom: 1.5, rotation: 0.0 });
+                panel.camera.set_key(CameraKey { frame: end, center: [0.62, 0.45], zoom: 1.6, rotation: -6.0 });
+                panel.annotations.push(crate::annotate::Shape::new(
+                    crate::annotate::ShapeKind::CameraArrow { from: [w * 0.3, h * 0.82], to: [w * 0.7, h * 0.82] },
+                    crate::annotate::DEFAULT_COLOR,
+                    6.0,
+                ));
             }
             _ => {}
         }

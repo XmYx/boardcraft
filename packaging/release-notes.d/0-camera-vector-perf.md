@@ -1,0 +1,3 @@
+- Camera moves can turn, and a panel can have as many camera keys as you need: add, pick, move and delete them on a strip under the canvas, by mouse or keyboard. Editors such as FilmCraft now replay camera moves from the exported timeline.
+- Draw editable arrows, curved motion arrows, camera-move arrows and vector lines over a panel; move, bend, recolour or delete them at any time, and exchange them as SVG.
+- Large boards save faster (only changed drawings are re-encoded) and use less graphics memory.

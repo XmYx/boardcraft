@@ -29,6 +29,7 @@ craft-media = { git = "https://github.com/storytold/craft-libs", rev = "0649a07a
 craft-video = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0", features = ["h264-encode"] }
 craft-keymap = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0" }
 craft-mcp-server = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0" }
+craft-svg = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0", default-features = false }
 craft-zip = { git = "https://github.com/storytold/craft-libs", rev = "0649a07aa11834fa5bd7052c8b97a861db532a22", version = "=0.1.0" }
 
 # foundation
@@ -36,6 +37,8 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
+# Curve geometry for annotation SVG (the version craft-svg uses).
+kurbo = "0.13"
 
 # Glyph advances for laying out board-sheet text (the version krilla uses).
 skrifa = "0.42"

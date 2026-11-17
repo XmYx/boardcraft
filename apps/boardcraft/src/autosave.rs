@@ -7,6 +7,11 @@
 //! older than [`STALE`] belong to a session that died: the app offers to recover them. Recovering
 //! takes the files over for the new session, so they stay safe until the board is saved. A clean
 //! save removes the autosave; quitting removes this session's files.
+//!
+//! Saves are incremental: autosaves and the user's own saves share one [`format::EncodeCache`], so
+//! only layers painted since the last write are encoded to PNG again (pixels are copy-on-write, so
+//! an unchanged layer still has the buffer the cache saw). On a large board an autosave then costs
+//! the JSON and the archive, not hundreds of PNG encodes.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -61,6 +66,8 @@ pub struct Autosave {
     last_heartbeat: Instant,
     busy: Arc<AtomicBool>,
     failed: Arc<std::sync::Mutex<Option<String>>>,
+    /// Encoded layer PNGs shared by every save of this session's board.
+    cache: Arc<std::sync::Mutex<format::EncodeCache>>,
 }
 
 fn now() -> String {
@@ -79,7 +86,14 @@ impl Autosave {
             last_heartbeat: Instant::now() - STALE,
             busy: Arc::new(AtomicBool::new(false)),
             failed: Default::default(),
+            cache: Default::default(),
         }
+    }
+
+    /// Save the board to the user's document, reusing the PNGs of unchanged layers.
+    pub fn save_document(&self, project: &Project, path: &Path) -> boardcraft_core::Result<()> {
+        let mut cache = self.cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        format::save_cached(project, path, &mut cache)
     }
 
     fn board_path(&self) -> Option<PathBuf> {
@@ -101,13 +115,15 @@ impl Autosave {
             self.last_edits = edits;
             let snapshot = project.clone();
             let meta = json!({"format": FORMAT, "version": 1, "name": project.name, "document": document.map(|d| d.to_string_lossy().into_owned()), "saved": now(), "heartbeat": now()});
-            let (busy, failed) = (self.busy.clone(), self.failed.clone());
+            let (busy, failed, cache) = (self.busy.clone(), self.failed.clone(), self.cache.clone());
             std::thread::spawn(move || {
                 let result = std::panic::catch_unwind(move || -> Result<(), String> {
                     if let Some(dir) = board.parent() {
                         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
                     }
-                    format::save(&snapshot, &board).map_err(|e| e.to_string())?;
+                    let mut cache = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    format::save_cached(&snapshot, &board, &mut cache).map_err(|e| e.to_string())?;
+                    drop(cache);
                     format::write_atomic(&sidecar, meta.to_string().as_bytes()).map_err(|e| e.to_string())
                 });
                 let err = match result {

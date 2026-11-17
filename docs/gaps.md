@@ -8,24 +8,20 @@ working storyboard artist (from [user-research.md](user-research.md) and the
 
 | # | Gap | Category | Beta | Hours | Doc |
 |---|---|---|---|---|---|
-| 1 | Audio track under the animatic (import WAV/MP3, waveform, scrub, keep sync on retime) | Playback | yes | 30 | [user-research](user-research.md) A5, R2 |
-| 2 | Movie export (MP4/MOV) with burn-ins: panel number, dialogue, timecode | Export | yes | 24 | A8, R4 |
-| 3 | Pen tablet tuning: ~~pressure curve, stabilizer~~ (done); per-OS tablet tests remain | Drawing | yes | 6 | A1 |
-| 4 | ~~Lasso select / move / transform, canvas rotation, fill~~ (done); anti-aliased selection edges, free-distort handles remain | Drawing | no | 6 | R6 |
 | 1 | ~~Audio track under the animatic~~ done: import, waveform, mix, anchors keep sync on retime; left: scrub audio, recording, per-clip fades | Playback | yes | 6 | [user-research](user-research.md) A5, R2 |
 | 2 | ~~Movie export with burn-ins~~ done: MP4 (H.264/AAC), panel number, timecode, dialogue; left: MOV/ProRes, burn-in layout options | Export | yes | 4 | A8, R4 |
-| 3 | Pen tablet tuning: pressure curve, per-OS tests, stabilizer | Drawing | yes | 16 | A1 |
-| 4 | Lasso select / move / transform, canvas rotation, fill | Drawing | yes | 30 | R6 |
+| 3 | Pen tablet tuning: ~~pressure curve, stabilizer~~ (done); per-OS tablet tests remain | Drawing | yes | 6 | A1 |
+| 4 | ~~Lasso select / move / transform, canvas rotation, fill~~ (done); anti-aliased selection edges, free-distort handles remain | Drawing | no | 6 | R6 |
 | 5 | ~~Remappable shortcuts (craft-keymap)~~ done; a printable shortcut sheet remains | UX | yes | 2 | A15, R11 |
 | 6 | ~~Board-sheet options in the app: fields, header text, notes lines~~ done; sheet templates (logo, custom layouts) remain | Printing | no | 6 | A10, R5 |
-| 7 | Camera rotation and a multi-key camera editor on the timeline | Camera | no | 16 | R1 |
-| 8 | Camera moves exported as FilmCraft Motion keyframes | Interchange | no | 10 | [interop](interop.md) |
-| 9 | Vector strokes (editable, resolution-free) | Drawing | no | 40 | — |
-| 10 | Arrow and motion symbols as an annotation layer | Drawing | no | 12 | R21 |
+| 7 | ~~Camera rotation and a multi-key camera editor~~ done; left: per-key easing curves, keys on the main timeline | Camera | no | 4 | R1 |
+| 8 | ~~Camera moves exported as FilmCraft Motion keyframes~~ done (OTIO, FCP7 XML, FCPXML) | Interchange | no | 0 | [interop](interop.md) |
+| 9 | Vector strokes: ~~editable, resolution-free~~ done as annotations; left: pressure-shaped vector brush, vector layers in the layer stack | Drawing | no | 24 | — |
+| 10 | ~~Arrow and motion symbols as an annotation layer~~ done (arrow, motion arrow, camera arrow, SVG in/out) | Drawing | no | 0 | R21 |
 | 11 | ~~MCP server over the commands~~ done (`boardcraft-cli mcp`); a live channel into the running app remains | Agents | no | 8 | [mcp](mcp.md), R24 |
 | 12 | Translations in craft-i18n; translated core error texts | Suite | yes | 8 | [localization-parity](localization-parity.md) |
 | 13 | Final app icon and renders; macOS, Windows, Flatpak packaging | Packaging | yes | 8 | [assets/app-icon/README.md](../assets/app-icon/README.md) |
-| 14 | Large boards: tiled layers, textures for visible panels only, incremental autosave | Performance | yes | 16 | [architecture](architecture.md) |
+| 14 | Large boards: ~~textures for visible panels only, incremental autosave~~ done; left: tiled layers, lazy layer loading | Performance | yes | 10 | [architecture](architecture.md) |
 | 15 | ~~Conform applies order and deletions from the edit~~ done (order, and flags for left-out panels; opt-in) | Interchange | no | 0 | [interop](interop.md) |
 
 ### Audio track (done)
@@ -55,8 +51,10 @@ file is built in memory so its index can go first).
 
 ### Large boards
 Every layer is a full-canvas RGBA buffer (3.7 MB at 1280×720); undo and autosave share unchanged
-buffers, but a 300-panel board with several layers needs tiles and on-demand textures. Autosave
-re-encodes every layer each time.
+buffers. Saves and autosaves now encode only layers painted since the last save, and textures
+exist only for panels on screen (see [architecture](architecture.md#large-boards)). Still open:
+every layer stays in memory (a 300-panel board with two layers is about 2.2 GB at 1280×720), so
+tiles or loading layers on demand remain the next step.
 
 ### Drawing tools (items 3 and 4)
 Done: pressure curve with a preview, minimum line size and a 0–10 stabilizer (Pen Settings, saved
@@ -69,3 +67,10 @@ anti-aliased lasso edge); scale handles are uniform (typed width/height for non-
 clipboard is BoardCraft's own (copies also go to the system clipboard as an image, but Ctrl+V on
 Wayland only pastes BoardCraft's own copy); the lasso has no keyboard drawing (Select All plus typed
 values is the keyboard path).
+
+### Camera and annotations (items 7 to 10)
+Camera keys rotate and a panel takes any number of them (key strip in the Panel view); timeline
+exports carry the move as Motion keyframes. Annotations are vector shapes over the drawing. Open:
+per-key ease curves (every segment eases in and out), camera keys shown on the main timeline, a
+pressure-shaped vector brush and vector layers interleaved with raster layers (annotations always
+draw on top).

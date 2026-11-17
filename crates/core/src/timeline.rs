@@ -13,6 +13,12 @@
 //! gain; OTIO keeps the clip id and panel anchor under `boardcraft`. The EDL lists them as `A`/`AA`
 //! events.
 //!
+//! A panel whose camera moves exports its whole canvas as the still, and its clip gets the move as
+//! Motion keyframes (craft-timeline's standard `motion` effect: position, scale and rotation,
+//! sampled every frame up to [`MAX_MOTION_KEYS`] a clip, linear between samples), which OTIO, FCP7
+//! XML and FCPXML carry and FilmCraft plays back. Static panels keep the camera's first frame as
+//! their still and no Motion. The EDL, which has no Motion, always gets first-frame stills.
+//!
 //! Conform matches clips to panels by the panel id in the clip's `boardcraft` metadata, then by the
 //! clip name `Panel 1.2`, then by the still's file name, and sets each matched panel's duration to
 //! the clip's, rounded to whole frames at the board's rate.
@@ -39,15 +45,79 @@ use std::path::{Path, PathBuf};
 
 use craft_timeline::build::{Builder, MediaSpec, settings_for};
 use craft_timeline::fx::Standard;
-use craft_timeline::model::{Label, Marker, MarkerId, MarkerKind, MediaKind, TrackKind};
+use craft_timeline::model::{Keyframe, Label, Marker, MarkerId, MarkerKind, MediaKind, Param, ParamValue, TrackItem, TrackKind, Vec2};
 use craft_timeline::{FrameRate, Report, Tick};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::audio::AudioClip;
 use crate::error::{Error, Result};
-use crate::model::{Id, Project};
-use crate::stills::{still_name, write_stills};
+use crate::model::{Id, Panel, Project};
+use crate::stills::{still_name, write_export_stills, write_stills};
+
+/// Most Motion keyframes one parameter of one clip gets; longer moves are sampled more sparsely.
+const MAX_MOTION_KEYS: u32 = 240;
+
+/// The frames at which a panel's camera move is sampled: every frame (up to [`MAX_MOTION_KEYS`]),
+/// always including the first and last frame and every key inside the panel.
+fn motion_frames(panel: &Panel) -> Vec<u32> {
+    let last = panel.duration.max(1) - 1;
+    let step = last.div_ceil(MAX_MOTION_KEYS).max(1);
+    let mut frames: Vec<u32> = (0..=last).step_by(step as usize).collect();
+    frames.push(last);
+    frames.extend(panel.camera.keys.iter().map(|k| k.frame).filter(|f| *f <= last));
+    frames.sort_unstable();
+    frames.dedup();
+    frames
+}
+
+/// Motion (position in sequence pixels, scale in percent, rotation in degrees clockwise) that shows
+/// the camera's view of the full-canvas still at `frame`, for a sequence the size of the canvas.
+pub fn motion_at(project: &Project, panel: &Panel, frame: f32) -> (Vec2, f64, f64) {
+    let (w, h) = (project.settings.width as f64, project.settings.height as f64);
+    let k = panel.camera.at(frame).fitted((w / h.max(1.0)) as f32);
+    let zoom = k.zoom as f64;
+    // The picture turns against the camera.
+    let rot = 0.0 - k.rotation as f64;
+    let (s, c) = rot.to_radians().sin_cos();
+    // The still's anchor is its centre; the camera's centre must land on the frame's centre.
+    let (dx, dy) = ((k.center[0] as f64 - 0.5) * w, (k.center[1] as f64 - 0.5) * h);
+    let pos = Vec2::new(w / 2.0 - zoom * (dx * c - dy * s), h / 2.0 - zoom * (dx * s + dy * c));
+    (pos, zoom * 100.0, rot)
+}
+
+/// A parameter that holds `values` at `times`: animated only when the values differ.
+fn param_of(times: &[Tick], values: Vec<ParamValue>) -> Option<Param> {
+    let first = values.first()?.clone();
+    if values.iter().all(|v| *v == first) {
+        return Some(Param::new(first));
+    }
+    let mut p = Param::new(first);
+    p.keyframes = times.iter().zip(values).map(|(t, v)| Keyframe::new(*t, v)).collect();
+    Some(p)
+}
+
+/// Put a moving panel's camera on `clip` as Motion keyframes (media time = clip time: the still
+/// starts at 0). Static panels keep the default Motion.
+fn add_motion(project: &Project, panel: &Panel, clip: &mut TrackItem) {
+    if !panel.camera.moves() {
+        return;
+    }
+    let r = rate(project);
+    let frames = motion_frames(panel);
+    let times: Vec<Tick> = frames.iter().map(|f| r.tick_of(*f as i64)).collect();
+    let samples: Vec<(Vec2, f64, f64)> = frames.iter().map(|f| motion_at(project, panel, *f as f32)).collect();
+    let mut set = |id: &str, values: Vec<ParamValue>| {
+        if let Some(p) = param_of(&times, values) {
+            craft_timeline::build::set_param(&Standard, clip, craft_timeline::fx::MOTION, id, p);
+        }
+    };
+    set("position", samples.iter().map(|s| ParamValue::Vec2(s.0)).collect());
+    set("scale", samples.iter().map(|s| ParamValue::Float(s.1)).collect());
+    if panel.camera.turns() {
+        set("rotation", samples.iter().map(|s| ParamValue::Float(s.2)).collect());
+    }
+}
 
 /// Namespace of BoardCraft's own data in timeline documents.
 pub const NAMESPACE: &str = "boardcraft";
@@ -183,6 +253,7 @@ fn to_model_in(project: &Project, stills_dir: &Path, order: &[(usize, usize)]) -
                 })
                 .to_string(),
             );
+            add_motion(project, panel, &mut clip);
             if let Some(track) = seq.video_tracks.first_mut() {
                 track.items.push(clip);
             }
@@ -219,6 +290,50 @@ fn to_model_in(project: &Project, stills_dir: &Path, order: &[(usize, usize)]) -
     b.put_sequence(seq_id, seq);
     b.top.push(seq_id);
     (b.finish().project, seq_id)
+}
+
+/// Namespace FilmCraft reads clip effects from in OTIO metadata.
+const FILMCRAFT_NAMESPACE: &str = "filmcraft";
+
+/// OTIO has no schema for keyframed effects; each application keeps them in its own metadata
+/// namespace. FilmCraft reads `metadata.filmcraft.effects`, so a clip with an animated Motion
+/// carries the same effect list there as well as under `boardcraft`. Static clips are left alone.
+/// Text that does not parse is returned unchanged.
+fn mirror_motion_for_filmcraft(text: &str) -> String {
+    fn animated(effects: &serde_json::Value) -> bool {
+        effects.as_array().is_some_and(|list| {
+            list.iter().any(|e| {
+                e.get("params")
+                    .and_then(serde_json::Value::as_object)
+                    .is_some_and(|ps| ps.values().any(|p| p.get("keyframes").and_then(serde_json::Value::as_array).is_some_and(|k| !k.is_empty())))
+            })
+        })
+    }
+    fn walk(v: &mut serde_json::Value, depth: usize) {
+        if depth > 64 {
+            return;
+        }
+        match v {
+            serde_json::Value::Object(o) => {
+                let is_clip = o.get("OTIO_SCHEMA").and_then(serde_json::Value::as_str).is_some_and(|s| s.starts_with("Clip."));
+                if is_clip
+                    && let Some(meta) = o.get_mut("metadata").and_then(serde_json::Value::as_object_mut)
+                    && let Some(effects) = meta.get(NAMESPACE).and_then(|m| m.get("effects")).filter(|e| animated(e)).cloned()
+                    && !meta.contains_key(FILMCRAFT_NAMESPACE)
+                {
+                    meta.insert(FILMCRAFT_NAMESPACE.to_string(), json!({ "effects": effects }));
+                }
+                for x in o.values_mut() {
+                    walk(x, depth + 1);
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, depth + 1)),
+            _ => {}
+        }
+    }
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(text) else { return text.to_string() };
+    walk(&mut v, 0);
+    serde_json::to_string_pretty(&v).unwrap_or_else(|_| text.to_string())
 }
 
 fn export_options<'a>(name: &'a str) -> craft_timeline::ExportOptions<'a> {
@@ -303,7 +418,7 @@ fn document_in(project: &Project, format: TimelineFormat, stills_dir: &Path, ord
     let mut report = Report::default();
     let opts = export_options(&project.name);
     let text = match format {
-        TimelineFormat::Otio => craft_timeline::otio::export(&model, seq, &opts, &mut report),
+        TimelineFormat::Otio => craft_timeline::otio::export(&model, seq, &opts, &mut report).map(|t| mirror_motion_for_filmcraft(&t)),
         TimelineFormat::Fcp7Xml => craft_timeline::fcp7::export(&model, seq, &opts, &mut report),
         TimelineFormat::Fcpxml => craft_timeline::fcpxml::export(&model, seq, &opts, &mut report),
         TimelineFormat::Edl => return Ok((edl(project, stills_dir, order), Vec::new())),
@@ -321,7 +436,13 @@ pub fn export(project: &Project, path: &Path) -> Result<PathBuf> {
     let parent = parent.canonicalize().or_else(|_| std::path::absolute(&parent)).map_err(|e| Error::io(&parent, e))?;
     let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "animatic".into());
     let stills = parent.join(format!("{stem}_stills"));
-    write_stills(project, &stills)?;
+    // An EDL carries no Motion: its stills are each panel's first camera frame. The other formats
+    // get the whole canvas of moving panels and replay the move as keyframes.
+    if format == TimelineFormat::Edl {
+        write_stills(project, &stills)?;
+    } else {
+        write_export_stills(project, &stills)?;
+    }
     write_audio_files(project, &stills)?;
     let (text, _) = document(project, format, &stills)?;
     craft_atomic::atomic_write(path, text.as_bytes()).map_err(|e| Error::io(path, e))?;
@@ -768,6 +889,70 @@ mod tests {
         assert!(text.starts_with("TITLE: "));
         assert!(text.contains("* FROM CLIP NAME: s001_p002.png"));
         assert!(text.contains("FCM: NON-DROP FRAME"));
+    }
+
+    /// The Motion a clip gets maps the camera frame's corners onto the sequence frame's corners.
+    #[test]
+    fn motion_reproduces_the_camera_frame() {
+        let mut p = board();
+        p.settings.width = 1280;
+        p.settings.height = 720;
+        let id = p.scenes[0].panels[0].id;
+        let key = crate::camera::CameraKey { frame: 10, center: [0.62, 0.4], zoom: 2.2, rotation: 17.0 };
+        p.panel_mut(id).unwrap().camera.set_key(key);
+        let panel = p.panel(id).unwrap().clone();
+        let (w, h) = (1280.0f64, 720.0f64);
+        let (pos, scale, rot) = motion_at(&p, &panel, 10.0);
+        let quad = panel.camera.quad(10.0, (w / h) as f32);
+        let (s, c) = rot.to_radians().sin_cos();
+        let z = scale / 100.0;
+        let map = |q: [f32; 2]| {
+            let (x, y) = (q[0] as f64 * w - w / 2.0, q[1] as f64 * h - h / 2.0);
+            (pos.x + z * (x * c - y * s), pos.y + z * (x * s + y * c))
+        };
+        for (corner, want) in quad.iter().zip([(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)]) {
+            let got = map(*corner);
+            assert!((got.0 - want.0).abs() < 0.5 && (got.1 - want.1).abs() < 0.5, "{corner:?} → {got:?}, want {want:?}");
+        }
+        // No camera: the identity.
+        let still = p.scenes[0].panels[1].clone();
+        let (pos, scale, rot) = motion_at(&p, &still, 0.0);
+        assert_eq!((pos.x, pos.y, scale, rot), (640.0, 360.0, 100.0, 0.0));
+    }
+
+    #[test]
+    fn moving_panels_export_motion_keyframes() {
+        let mut p = board();
+        let id = p.scenes[0].panels[0].id;
+        let d = p.panel(id).unwrap().duration;
+        let cam = &mut p.panel_mut(id).unwrap().camera;
+        cam.set_key(crate::camera::CameraKey { frame: 0, ..Default::default() });
+        cam.set_key(crate::camera::CameraKey { frame: d / 2, center: [0.3, 0.5], zoom: 2.0, rotation: 0.0 });
+        cam.set_key(crate::camera::CameraKey { frame: d - 1, center: [0.6, 0.6], zoom: 2.0, rotation: 30.0 });
+        let (model, seq) = to_model(&p, Path::new("/x"));
+        let s = model.sequence(seq).unwrap();
+        let clips = &s.video_tracks[0].items;
+        let m = clips[0].effect("motion").unwrap();
+        for id in ["position", "scale", "rotation"] {
+            let param = m.param(id).unwrap();
+            assert_eq!(param.keyframes.len(), d as usize, "{id}: one key a frame");
+        }
+        // A static panel keeps the default Motion.
+        assert!(!clips[1].effect("motion").unwrap().is_animated());
+        let (otio, _) = document(&p, TimelineFormat::Otio, Path::new("/x")).unwrap();
+        assert!(otio.contains("\"keyframes\""));
+        let v: serde_json::Value = serde_json::from_str(&otio).unwrap();
+        let clip = &v["tracks"]["children"][0]["children"][0];
+        assert!(clip["metadata"]["filmcraft"]["effects"].is_array(), "FilmCraft reads Motion from its namespace: {clip}");
+        assert!(clip["metadata"]["boardcraft"]["panel_id"].is_u64());
+        assert!(v["tracks"]["children"][0]["children"][1]["metadata"].get("filmcraft").is_none());
+        let (xml, notes) = document(&p, TimelineFormat::Fcp7Xml, Path::new("/x")).unwrap();
+        assert!(xml.contains("<keyframe>") && xml.contains("Basic Motion"), "{notes:?}");
+        let (fcpxml, _) = document(&p, TimelineFormat::Fcpxml, Path::new("/x")).unwrap();
+        assert!(fcpxml.contains("adjust-transform") && fcpxml.contains("keyframeAnimation"));
+        // Long panels are sampled, not keyed every frame.
+        p.panel_mut(id).unwrap().duration = 5000;
+        assert!(motion_frames(p.panel(id).unwrap()).len() <= MAX_MOTION_KEYS as usize + 4);
     }
 
     #[test]

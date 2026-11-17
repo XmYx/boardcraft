@@ -72,6 +72,15 @@ const CATALOG: &[Entry] = &[
     e("tool.brush", "Brush", "Tools", &["B"]),
     e("tool.eraser", "Eraser", "Tools", &["E"]),
     e("tool.camera", "Camera", "Tools", &["C"]),
+    e("tool.lasso", "Lasso", "Tools", &["L"]),
+    e("tool.rect_select", "Rectangle select", "Tools", &["M"]),
+    e("tool.fill", "Fill", "Tools", &["G"]),
+    e("tool.select_shape", "Select shape", "Tools", &["Shift+S"]),
+    e("tool.vector_pen", "Vector pen", "Tools", &["P"]),
+    e("tool.arrow", "Arrow", "Tools", &["A"]),
+    e("tool.motion_arrow", "Motion arrow", "Tools", &["Shift+M"]),
+    e("tool.camera_arrow", "Camera arrow", "Tools", &["Shift+A"]),
+    e("camera.add_key", "Add Key at Playhead", "Tools", &["K"]),
     e("tool.smaller", "Smaller Brush", "Tools", &["["]),
     e("tool.bigger", "Bigger Brush", "Tools", &["]"]),
 ];
@@ -220,6 +229,22 @@ pub fn run(app: &mut BoardApp, id: &str) {
         "tool.brush" => app.tool = CanvasTool::Brush,
         "tool.eraser" => app.tool = CanvasTool::Eraser,
         "tool.camera" => app.tool = CanvasTool::Camera,
+        "tool.lasso" => app.tool = CanvasTool::Lasso,
+        "tool.rect_select" => app.tool = CanvasTool::RectSelect,
+        "tool.fill" => app.tool = CanvasTool::Fill,
+        "tool.select_shape" => app.tool = CanvasTool::Select,
+        "tool.vector_pen" => app.tool = CanvasTool::Pen,
+        "tool.arrow" => app.tool = CanvasTool::Arrow,
+        "tool.motion_arrow" => app.tool = CanvasTool::MotionArrow,
+        "tool.camera_arrow" => app.tool = CanvasTool::CameraArrow,
+        "camera.add_key" => {
+            // In the Panel view, on the selected panel.
+            if app.view == View::Panel
+                && let Some(panel) = app.selected
+            {
+                crate::camera_keys::add_at_playhead(app, panel);
+            }
+        }
         "tool.smaller" | "tool.bigger" => {
             let r = if app.tool == CanvasTool::Eraser { &mut app.eraser_radius } else { &mut app.brush.radius };
             *r = if id == "tool.bigger" { (*r * 1.25).min(200.0) } else { (*r / 1.25).max(0.5) };

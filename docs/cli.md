@@ -66,9 +66,15 @@ Ids come from `info`. Every command is JSON with a `"cmd"` tag.
 | `set_duration` | `panel`, `frames` | clamped to 1 … one hour at 240 fps |
 | `set_text` | `panel`, `field` (`dialogue`/`action`/`notes`/`shot`), `text` | |
 | `set_scene_heading` | `scene`, `heading` | |
-| `set_camera_key` | `panel`, `key` {`frame`, `center` [x, y], `zoom`} | add or replace; values clamped |
+| `set_camera_key` | `panel`, `key` {`frame`, `center` [x, y], `zoom`, `rotation?` (degrees clockwise)} | add or replace; values clamped |
 | `remove_camera_key` | `panel`, `frame` | |
 | `clear_camera` | `panel` | |
+| `move_camera_key` | `panel`, `from`, `to` | move a key to another frame (replaces a key there) |
+| `add_shape` | `panel`, `shape` {`type`: `stroke` (`points`) / `arrow` / `camera_arrow` (`from`, `to`) / `motion_arrow` (`from`, `via`, `to`), `color` [r, g, b, a], `width`} | canvas pixels; values clamped |
+| `delete_shape` | `panel`, `index` | |
+| `move_shape` | `panel`, `index`, `dx`, `dy` | |
+| `style_shape` | `panel`, `index`, `color`, `width?` | recolour, change the line width |
+| `import_shapes_svg` | `panel`, `svg` (text), `replace?` | annotations from an SVG ([file-format](file-format.md)) |
 | `add_layer` | `panel`, `name` | `created` = the layer |
 | `delete_layer` | `panel`, `layer` | refuses to delete the last layer |
 | `set_layer_visible` | `panel`, `layer`, `visible` | |

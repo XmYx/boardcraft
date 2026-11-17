@@ -108,6 +108,10 @@ pub struct Panel {
     /// Shot type or size (`WS`, `MS`, `CU`, `OTS`, …), free text.
     #[serde(default)]
     pub shot: String,
+    /// Vector annotations drawn over the layers: strokes, arrows, motion and camera arrows
+    /// (schema 2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<crate::annotate::Shape>,
     /// Bumped on every change to the pixels; lets a UI cache textures. Not saved.
     #[serde(skip)]
     pub revision: u64,
@@ -123,6 +127,7 @@ impl Panel {
         for layer in self.layers.iter().filter(|l| l.visible && !l.pixels.is_empty()) {
             out.composite_over(&layer.pixels, layer.opacity);
         }
+        crate::annotate::draw(&mut out, &self.annotations, 0.0, 0.0);
         out
     }
 
@@ -134,6 +139,7 @@ impl Panel {
         for layer in self.layers.iter().filter(|l| l.visible && !l.pixels.is_empty()) {
             out.composite_over(&layer.pixels.crop(x, y, w, h), layer.opacity);
         }
+        crate::annotate::draw(&mut out, &self.annotations, x as f32, y as f32);
         out
     }
 
@@ -234,6 +240,7 @@ impl Project {
             shot: String::new(),
             layers: vec![layer],
             camera: Camera::default(),
+            annotations: Vec::new(),
             revision: 0,
         }
     }
@@ -398,9 +405,15 @@ impl Project {
         if !(MIN_SIDE..=MAX_SIDE).contains(&width) || !(MIN_SIDE..=MAX_SIDE).contains(&height) {
             return Err(crate::Error::Format(format!("canvas {width}×{height} is out of range ({MIN_SIDE}–{MAX_SIDE})")));
         }
+        // Layers stay centred (`Raster::recanvas`); annotations shift with them.
+        let dx = ((width as i64 - self.settings.width as i64) / 2) as f32;
+        let dy = ((height as i64 - self.settings.height as i64) / 2) as f32;
         for p in self.scenes.iter_mut().flat_map(|s| s.panels.iter_mut()) {
             for l in &mut p.layers {
                 l.pixels = l.pixels.recanvas(width, height);
+            }
+            for a in &mut p.annotations {
+                a.translate(dx, dy);
             }
             p.touch();
         }
@@ -478,6 +491,7 @@ impl Project {
                 renumber(&mut p.id);
                 p.duration = p.duration.clamp(1, MAX_PANEL_FRAMES);
                 p.camera.normalize();
+                crate::annotate::sanitize(&mut p.annotations);
                 for l in &mut p.layers {
                     renumber(&mut l.id);
                     if !l.opacity.is_finite() {

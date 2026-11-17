@@ -2,115 +2,201 @@
 # Columns: in-shared-catalog <TAB> source text. `shared` = already in craft-i18n common.tsv.
 app	+ Layer
 app	+ Panel
+app	1 is linear. Lower: a light touch already draws thick. Higher: press harder for thick lines.
 app	= {seconds} s at {fps} fps
+app	A movie export is already running
 app	A panel keeps at least one layer
 app	AI panel sketch
 app	AI sketch
 app	Action
+app	Add Arrow
+app	Add Camera Arrow
+app	Add Key at Playhead
+app	Add Motion Arrow
+app	Add a sound file at the selected panel; it moves with the panel when you retime
+app	Added the sound {name}
+app	Added the sound {name} at panel {label}; it moves with the panel
+app	Added {shape}
+app	All visible layers
+app	An MP4 (H.264 video, AAC sound) of the animatic with its camera moves and sound track.
+app	Anchor to Panel {label}
+shared	Angle
 app	Animatic timeline
+app	Annotation colour
+app	Annotation deleted
+app	Annotations
 shared	Apply
+app	Apply Transform
+app	Apply the transform (Enter)
+shared	Arrow
 app	Aspect ratio
+shared	Audio
 app	Autosave failed: {error}
+app	Bend
 app	Bigger Brush
 app	Board
 app	Board (panel grid)
 app	Board Settings
 app	Board Settings…
 app	Board is {w}×{h} at {fps} fps
+app	Board size ({w}×{h})
 app	BoardCraft closed before these boards were saved. Recover them?
 app	BoardCraft project
 app	Boarded {scenes} scenes from {file}
 app	Boarded {scenes} scenes, {n} panels from {file}
+app	Broad arrow for a camera move (Shift+A)
 app	Brush
+app	Burn-ins: panel number, timecode and dialogue
 app	CAM
 app	Camera
+app	Camera arrow
+app	Camera key added at frame {f}
+app	Camera key at frame {f}
+app	Camera key at frame {f} deleted
+app	Camera key moved to frame {f}
+app	Camera keys
 app	Camera moves
+app	Camera tool (C): drag to move the frame, scroll to zoom, Shift+scroll to turn.
 shared	Cancel
+app	Cancel Export
+app	Cancel Selection
+app	Centre x
+app	Centre y
 shared	Clear
+app	Click a shape to select it, drag to move it, Delete to remove it.
+app	Click inside the canvas to fill
+app	Close gaps (px)
 shared	Colour
 shared	Columns
 app	Conform Timing from Edit…
 app	Conform to the Edit
 app	Conformed to {file}: {summary}
+app	Copied the selection
+shared	Copy
+app	Copy Selection
 app	Could not import {file}: {error}
 app	Could not open: {error}
 app	Could not read the edit: {error}
 app	Could not read {file}: {error}
 app	Could not recover: {error}
+app	Could not save preferences: {error}
 app	Could not save the shortcuts: {error}
 app	Could not write {file}: {error}
+app	Curved arrow for movement in the shot (Shift+M)
+shared	Cut
+app	Cut Selection
+app	Cut the selection
 app	Decide Later
 shared	Delete
+app	Delete Annotation
+app	Delete Key
 app	Delete Panel
+app	Delete Selection
 app	Delete key {f}
 app	Delete the camera key at frame {f}
+app	Delete the selected annotation (Delete)
 app	Demo board: Paper Boats
 app	Dialogue
 app	Discard {name}
 shared	Don't Save
-app	Drag to frame the shot, scroll to zoom (C)
+app	Drag on the canvas to select.
+app	Drag to frame the shot, scroll to zoom, Shift+scroll to turn (C)
 app	Draw (B)
 app	Drawings keep their size: the frame grows or crops around the centre.
+app	Drop the selection (Esc)
 app	Duplicate Panel
 shared	Duration
 shared	Edit
 app	Edit in Image Editor…
-app	Edit key:
 app	Edit: {file}
 app	Editing {file} in your image editor. Save there to update the panel.
-app	End
+app	Edits the selected camera key, or adds one at the playhead.
 app	Erase (E)
 shared	Eraser
 app	Export Animatic Timeline
+app	Export Annotations (SVG)…
 app	Export Board Sheet
 app	Export Board Sheet (PDF)…
+app	Export Movie
+app	Export Movie (MP4)…
 app	Export Panel Images (PNG)…
 app	Export Shot List (CSV)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
+app	Exporting the movie {file}…
 shared	Export…
 shared	File
+shared	Fill
+app	Fill an area with the colour (G)
+app	Filled
 app	Fit Canvas
+app	Flip Bend
 app	Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings.
 shared	Frame
 app	Frame rate
+app	Freehand vector strokes that stay editable (P)
+app	Gain
 app	Generate a sketch for this panel with the shared Craft AI tools (not connected yet)
 app	Go to Start
 app	Go to start
+app	Half size ({w}×{h})
 app	Hardness
 app	Header text
 app	Heading
 shared	Height
 shared	Image
 shared	Images
+app	Import Annotations (SVG)…
+app	Import Audio…
 app	Import Image to Panel…
 app	Import Image…
 app	Import Screenplay…
 app	Imported {file}
 app	Keep panel lengths in seconds
 app	Keep the autosaves and ask again next time
+app	Keep the sound where it is when panels are retimed
 app	Key at end
 app	Key at start
+app	Key the camera at the playhead's frame (K)
 shared	Keyboard Shortcuts…
 shared	Language
+shared	Lasso
 shared	Layer
 shared	Layers
+app	Length {seconds} s
 shared	Letter
+app	Line size at the lightest touch
+app	Line width
 app	Mark panels the edit leaves out (nothing is deleted)
+app	Minimum size (%)
+app	Motion arrow
 shared	Move Down
 app	Move Earlier
 app	Move Later
 app	Move Panel Earlier
 app	Move Panel Later
 shared	Move Up
+app	Moves with panel {label}
+app	Movie export cancelled
+app	Movie {percent}%
 app	New Board…
 app	New Panel
 app	New Scene
 app	New panel at the end of this scene
 app	Next Frame
+app	Next Key
 app	Next Panel
+app	No keys: the camera shows the whole canvas. Add a key, then frame it with the Camera tool (C) or the fields.
 app	No panel selected.
+app	No sound yet. Import Audio adds a clip at the selected panel.
+app	None yet. Draw with the annotation tools in the Panel view, or add one above.
 app	Notes
+app	Nothing selected
+app	Nothing to paste
+app	Nudge Down
+app	Nudge Left
+app	Nudge Right
+app	Nudge Up
 app	Onion Skin
 app	Open this layer in your image editor; BoardCraft reloads it when you save there
 app	Opened {file}
@@ -122,16 +208,24 @@ app	Panel canvas
 app	Panel {label}
 app	Panel {label} on the timeline
 shared	Paper
+shared	Paste
+app	Paste Selection
+app	Pasted. Drag, use the arrow keys or type values to place it; Enter applies, Esc cancels.
 shared	Pause
 app	Pause Animatic
+app	Pen Settings
 shared	Play
 app	Play Animatic
 app	Play or Pause Animatic
 app	Play the animatic (Space)
 app	Playback
+app	Playing without sound: {error}
+app	Pressure curve
+app	Pressure curve preview: the lightest touch draws {light}% of full size, half pressure {half}%
 app	Pressure: opacity
 app	Pressure: size
 app	Previous Frame
+app	Previous Key
 app	Previous Panel
 app	Print under each panel
 app	Production, episode, draft
@@ -140,9 +234,16 @@ app	Quit
 app	Recover unsaved work
 app	Recover {name}
 app	Recovered unsaved work. Save it to keep it.
+app	Rectangle select
 shared	Redo
 app	Redone
+app	Remove Sound
+app	Reset Pen Settings
+app	Reset View Rotation
 app	Reset camera
+app	Rotate View Left
+app	Rotate View Right
+shared	Rotation
 shared	Rows
 app	Ruled lines for handwritten notes
 shared	Save
@@ -153,47 +254,92 @@ app	Saved {file}
 app	Scene
 app	Scene {number}
 app	Screenplay
+shared	Select All
+app	Select a freehand area of the layer (L)
 app	Select a panel first
 app	Select a panel.
+app	Select a rectangle of the layer (M)
+app	Select a visible layer first
 app	Select a visible layer to draw on
+app	Select a visible layer to fill on
+app	Select shape
+app	Select the whole layer (Ctrl+A)
+app	Select, move and delete annotations (Shift+S)
+app	Selected {w} × {h} px. Drag, use the arrow keys or type values to move it; Enter applies, Esc cancels.
+app	Selection applied
+app	Selection cancelled
+app	Selection deleted
 app	Set the frame to {ratio}, keeping its width
 app	Shortcut changes discarded
 app	Shortcuts saved
 app	Shot
 app	Shot presets
+app	Shown at zoom {z} so the turned frame stays on the canvas
 shared	Size
 app	Smaller Brush
+app	Smooths strokes: 0 is off, 10 is strongest (the line trails the pen)
+app	Sound
+app	Sound left out: {list}
+app	Sound {name} at {seconds} s
+app	Stabilizer
 app	Start
-app	Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view.
+app	Start at Playhead
+app	Static: the whole canvas. Add keys below, or with the key strip and the Camera tool (C) in the Panel view.
+app	Stays at its time when panels are retimed
+app	Straight arrow: drag from tail to head (A)
 app	Switch Board and Panel View
 shared	System
 app	Take panel durations, and optionally their order, from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
+app	The clipboard image is too large
 app	The edit uses every panel
+app	The movie export stopped unexpectedly
+app	This layer
 shared	Timeline
 app	Timing
 app	To Start
+shared	Tolerance
 shared	Tools
+app	Transform reset
+app	Trim start
+app	Turn Left
+app	Turn Right
+app	Turn the frame 5° clockwise
+app	Turn the frame 5° counter-clockwise
+app	Turn the view (Shift+[ and Shift+], or hold R and drag); Shift+0 resets. Drawings are not changed.
+app	Unanchor
 shared	Undo
 app	Undone
 shared	Unsaved changes
 app	Untitled board
 app	Updated the board from {file}: {summary}
 app	Updated the layer from {file}
+app	Vector pen
+app	Vector stroke
 shared	View
+app	View rotated to {angle}°
+app	View rotation
+app	View rotation reset
 app	What changes
 shared	Width
 app	Wrote the board sheet {file} ({n} pages)
+app	Wrote the movie {file} ({w}×{h}, {n} frames)
 app	Wrote the shot list {file}
 app	Wrote {file}; open it in your image editor ({error})
+app	Wrote {n} annotations to {file}
 app	Wrote {n} panel images to {dir}
+shared	X
+shared	Y
 shared	Zoom
 shared	Zoom In
 shared	Zoom Out
-app	camera move
+app	camera move with {n} keys
 app	frame {f}
 app	s
 app	static camera
+app	turn
 app	zoom
+app	{canvas}, view rotated {angle}°
+app	{canvas}, {selection}
 app	{format}…
 app	{layer} opacity
 app	{layer} options
@@ -201,9 +347,12 @@ app	{layer} visible
 app	{name}, autosaved {time}
 app	{n} clips are not from this board
 app	{n} clips matched to panels
+app	{n} keys · playhead at frame {f}
 app	{n} panels a page, {pages} pages
 app	{n} panels are not in the edit: {panels}
 app	{n} panels change place, {m} of them to another scene
 app	{n} panels get a new duration
 app	{n} panels get the note “{mark}”, {m} lose it
 app	{n} scenes are left empty and removed
+app	{shape} {n}
+app	{summary} from {file}

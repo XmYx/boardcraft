@@ -71,6 +71,7 @@ pub(crate) fn info_json(p: &boardcraft_core::Project) -> serde_json::Value {
                     "dialogue": x.dialogue, "action": x.action, "notes": x.notes, "shot": x.shot,
                     "layers": x.layers.iter().map(|l| json!({"id": l.id.0, "name": l.name, "visible": l.visible, "opacity": l.opacity})).collect::<Vec<_>>(),
                     "camera": x.camera.keys,
+                    "annotations": x.annotations,
                 })).collect::<Vec<_>>(),
             })
         })

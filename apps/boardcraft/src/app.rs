@@ -32,7 +32,7 @@ pub enum View {
 pub enum CanvasTool {
     Brush,
     Eraser,
-    /// Move the selected camera key; the scroll wheel zooms it.
+    /// Move the selected camera key; the scroll wheel zooms it, Shift+scroll turns it.
     Camera,
     /// Freehand selection on the active layer.
     Lasso,
@@ -40,13 +40,13 @@ pub enum CanvasTool {
     RectSelect,
     /// Bucket fill.
     Fill,
-}
-
-/// Which camera key the Camera tool edits.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum KeyChoice {
-    Start,
-    End,
+    /// Select, move and delete annotations.
+    Select,
+    /// Freehand vector strokes.
+    Pen,
+    Arrow,
+    MotionArrow,
+    CameraArrow,
 }
 
 /// A stroke in progress.
@@ -66,7 +66,16 @@ pub struct BoardApp {
     pub tool: CanvasTool,
     pub brush: Brush,
     pub eraser_radius: f32,
-    pub key_choice: KeyChoice,
+    /// The selected camera key (panel, frame): the Camera tool and the key strip edit it.
+    pub camera_key: Option<(Id, u32)>,
+    /// Give keyboard focus to the camera key marker on this frame next frame.
+    pub focus_camera_key: Option<u32>,
+    /// The selected annotation (panel, index).
+    pub shape_sel: Option<(Id, usize)>,
+    /// Colour and line width of new annotations.
+    pub shape_style: ([u8; 4], f32),
+    /// An annotation being drawn on the canvas.
+    pub draft: Option<crate::annotations::Draft>,
     pub playing: bool,
     /// Animatic playhead in frames.
     pub playhead: f64,
@@ -150,7 +159,11 @@ impl BoardApp {
             tool: CanvasTool::Brush,
             brush: Brush::default(),
             eraser_radius: 14.0,
-            key_choice: KeyChoice::Start,
+            camera_key: None,
+            focus_camera_key: None,
+            shape_sel: None,
+            shape_style: (boardcraft_core::annotate::DEFAULT_COLOR, 4.0),
+            draft: None,
             playing: false,
             playhead: 0.0,
             timeline_ppf: 2.0,
@@ -297,7 +310,7 @@ impl BoardApp {
     }
 
     fn save_to(&mut self, path: &Path) -> bool {
-        match format::save(&self.project, path) {
+        match self.autosave.save_document(&self.project, path) {
             Ok(()) => {
                 self.path = Some(path.to_path_buf());
                 self.dirty = false;
@@ -542,6 +555,7 @@ impl BoardApp {
         self.project = s.project;
         self.dirty = s.dirty;
         self.stroke = None;
+        self.draft = None;
         // Restored panels may carry revisions the texture cache has seen with other pixels.
         self.textures.clear();
         let keep = s.selected.filter(|id| self.project.panel(*id).is_some());
@@ -899,6 +913,7 @@ impl BoardApp {
             crate::history::Gesture::Other
         };
         self.history.end_frame(self.edits, gesture);
+        self.textures.end_frame();
     }
 
     fn draw_inner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -909,6 +924,7 @@ impl BoardApp {
         if !ctx.egui_wants_keyboard_input() {
             crate::tools::shortcuts(self, &ctx);
         }
+        crate::annotations::shortcuts(self, &ctx);
         crate::keys::handle(self, &ctx);
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| {

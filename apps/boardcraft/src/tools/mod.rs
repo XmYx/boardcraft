@@ -13,7 +13,7 @@ mod ui_tests;
 use boardcraft_core::command::Command;
 use boardcraft_core::pen::Stabilizer;
 
-use crate::app::{BoardApp, CanvasTool, View};
+use crate::app::{BoardApp, View};
 
 /// One step of the view rotation keys, in degrees.
 pub const ROTATE_STEP: f32 = 15.0;
@@ -117,19 +117,7 @@ pub fn shortcuts(app: &mut BoardApp, ctx: &egui::Context) {
         app.tools.view_angle = 0.0;
         announce_rotation(app);
     }
-    // Tool keys.
-    let (l, m, g) = ctx.input(|i| (i.key_pressed(Key::L), i.key_pressed(Key::M), i.key_pressed(Key::G)));
-    if ctx.input(|i| i.modifiers.is_none()) {
-        if l {
-            app.tool = CanvasTool::Lasso;
-        }
-        if m {
-            app.tool = CanvasTool::RectSelect;
-        }
-        if g {
-            app.tool = CanvasTool::Fill;
-        }
-    }
+    // The tool letters (L, M, G, …) are in the keymap catalog (`crate::keys`).
     if app.view != View::Panel {
         return;
     }

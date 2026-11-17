@@ -13,12 +13,14 @@
 
 #[macro_use]
 mod i18n;
+mod annotations;
 mod app;
 mod args;
 mod audio_out;
 mod audio_ui;
 mod autosave;
 mod board;
+mod camera_keys;
 mod canvas;
 mod conform_dialog;
 mod external;

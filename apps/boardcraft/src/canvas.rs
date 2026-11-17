@@ -1,9 +1,21 @@
-//! Panel view: the drawing canvas, the camera frame and animatic playback.
+//! Panel view: the drawing canvas, the camera frame, annotations and animatic playback.
 
-use boardcraft_core::{CameraKey, Id, StrokePoint};
+use boardcraft_core::{Id, StrokePoint, ViewQuad};
 
-use crate::app::{BoardApp, CanvasTool, KeyChoice, StrokeState};
+use crate::app::{BoardApp, CanvasTool, StrokeState};
 use crate::tools::view::ViewXf;
+
+/// Outline a camera frame (a quad in normalized canvas units) through the view transform; a turned
+/// frame also marks its top edge so the turn reads.
+fn frame_outline(painter: &egui::Painter, xf: &ViewXf, q: ViewQuad, stroke: egui::Stroke) {
+    let pts: Vec<egui::Pos2> = q.iter().map(|p| xf.to_screen([p[0] * xf.size.x, p[1] * xf.size.y])).collect();
+    painter.add(egui::Shape::closed_line(pts.clone(), stroke));
+    if let [tl, tr, _, bl] = pts.as_slice() {
+        let mid = egui::pos2((tl.x + tr.x) / 2.0, (tl.y + tr.y) / 2.0);
+        let inward = (*bl - *tl).normalized() * 8.0;
+        painter.line_segment([mid, mid + inward], stroke);
+    }
+}
 
 fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
     ui.horizontal_wrapped(|ui| {
@@ -12,37 +24,40 @@ fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
         ui.selectable_value(&mut app.tool, CanvasTool::Lasso, tl!("Lasso")).on_hover_text(tl!("Select a freehand area of the layer (L)"));
         ui.selectable_value(&mut app.tool, CanvasTool::RectSelect, tl!("Rectangle select")).on_hover_text(tl!("Select a rectangle of the layer (M)"));
         ui.selectable_value(&mut app.tool, CanvasTool::Fill, tl!("Fill")).on_hover_text(tl!("Fill an area with the colour (G)"));
-        ui.selectable_value(&mut app.tool, CanvasTool::Camera, tl!("Camera")).on_hover_text(tl!("Drag to frame the shot, scroll to zoom (C)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::Camera, tl!("Camera"))
+            .on_hover_text(tl!("Drag to frame the shot, scroll to zoom, Shift+scroll to turn (C)"));
         ui.separator();
-        match app.tool {
-            CanvasTool::Brush => {
-                let l = ui.label(tl!("Size"));
-                ui.add(egui::Slider::new(&mut app.brush.radius, 0.5..=60.0).logarithmic(true)).labelled_by(l.id);
-                let mut c = egui::Color32::from_rgba_unmultiplied(app.brush.color[0], app.brush.color[1], app.brush.color[2], app.brush.color[3]);
-                let l = ui.label(tl!("Colour"));
-                if ui.color_edit_button_srgba(&mut c).labelled_by(l.id).changed() {
-                    app.brush.color = c.to_srgba_unmultiplied();
-                }
-                let l = ui.label(tl!("Hardness"));
-                ui.add(egui::Slider::new(&mut app.brush.hardness, 0.0..=1.0).show_value(false)).labelled_by(l.id);
-                ui.checkbox(&mut app.brush.pressure_size, tl!("Pressure: size"));
-                ui.checkbox(&mut app.brush.pressure_opacity, tl!("Pressure: opacity"));
-                ui.menu_button(tl!("Pen Settings"), |ui| crate::tools::pen::settings_ui(&mut app.tools.pen, ui));
-            }
-            CanvasTool::Eraser => {
-                let l = ui.label(tl!("Size"));
-                ui.add(egui::Slider::new(&mut app.eraser_radius, 1.0..=120.0).logarithmic(true)).labelled_by(l.id);
-            }
-            CanvasTool::Camera => {
-                ui.label(tl!("Edit key:"));
-                ui.radio_value(&mut app.key_choice, KeyChoice::Start, tl!("Start"));
-                ui.radio_value(&mut app.key_choice, KeyChoice::End, tl!("End"));
-            }
-            CanvasTool::Lasso | CanvasTool::RectSelect => crate::tools::selection::toolbar(app, ui),
-            CanvasTool::Fill => crate::tools::fill_toolbar(app, ui),
+        for (tool, label, hint) in crate::annotations::tools() {
+            ui.selectable_value(&mut app.tool, tool, label).on_hover_text(hint);
         }
         ui.separator();
         crate::tools::rotation_field(app, ui);
+    });
+    ui.horizontal_wrapped(|ui| match app.tool {
+        CanvasTool::Brush => {
+            let l = ui.label(tl!("Size"));
+            ui.add(egui::Slider::new(&mut app.brush.radius, 0.5..=60.0).logarithmic(true)).labelled_by(l.id);
+            let mut c = egui::Color32::from_rgba_unmultiplied(app.brush.color[0], app.brush.color[1], app.brush.color[2], app.brush.color[3]);
+            let l = ui.label(tl!("Colour"));
+            if ui.color_edit_button_srgba(&mut c).labelled_by(l.id).changed() {
+                app.brush.color = c.to_srgba_unmultiplied();
+            }
+            let l = ui.label(tl!("Hardness"));
+            ui.add(egui::Slider::new(&mut app.brush.hardness, 0.0..=1.0).show_value(false)).labelled_by(l.id);
+            ui.checkbox(&mut app.brush.pressure_size, tl!("Pressure: size"));
+            ui.checkbox(&mut app.brush.pressure_opacity, tl!("Pressure: opacity"));
+            ui.menu_button(tl!("Pen Settings"), |ui| crate::tools::pen::settings_ui(&mut app.tools.pen, ui));
+        }
+        CanvasTool::Eraser => {
+            let l = ui.label(tl!("Size"));
+            ui.add(egui::Slider::new(&mut app.eraser_radius, 1.0..=120.0).logarithmic(true)).labelled_by(l.id);
+        }
+        CanvasTool::Camera => {
+            ui.label(tl!("Edits the selected camera key, or adds one at the playhead."));
+        }
+        CanvasTool::Lasso | CanvasTool::RectSelect => crate::tools::selection::toolbar(app, ui),
+        CanvasTool::Fill => crate::tools::fill_toolbar(app, ui),
+        CanvasTool::Select | CanvasTool::Pen | CanvasTool::Arrow | CanvasTool::MotionArrow | CanvasTool::CameraArrow => crate::annotations::toolbar(app, ui),
     });
 }
 
@@ -63,9 +78,12 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         ui.label(tl!("No panel selected."));
         return;
     };
+    if !app.playing {
+        egui::Panel::bottom("camera-keys").resizable(false).show(ui, |ui| crate::camera_keys::strip(app, ui, panel_id));
+    }
     let settings = app.project.settings;
-    let avail = ui.available_rect_before_wrap().shrink(12.0);
     let aspect = settings.width as f32 / settings.height.max(1) as f32;
+    let avail = ui.available_rect_before_wrap().shrink(12.0);
     let (w, h) =
         if avail.width() / avail.height().max(1.0) > aspect { (avail.height() * aspect, avail.height()) } else { (avail.width(), avail.width() / aspect) };
     if w < 8.0 || h < 8.0 {
@@ -74,6 +92,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     // View zoom (1 = fit) and pan; the whole area takes input so panning works off the canvas.
     let zoom = app.canvas_zoom.clamp(0.25, 16.0);
     let rect = egui::Rect::from_center_size(avail.center() + app.canvas_pan, egui::vec2(w * zoom, h * zoom));
+    // Drag only: a press starts a stroke (or picks a shape) at once, so a click paints a dot.
     let resp = ui.allocate_rect(avail, egui::Sense::drag());
     if resp.hovered() {
         // Ctrl+wheel or pinch zooms about the pointer; middle-drag or Alt+drag pans.
@@ -108,13 +127,14 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     }
     let xf = ViewXf::new(rect, app.tools.view_angle, settings.width, settings.height);
     app.tools.last_view = Some(xf);
-    // The canvas publishes what it shows: which panel, its layers and its camera.
+    // The canvas publishes what it shows: which panel, its layers, annotations and camera.
     let description = match app.project.panel(panel_id) {
         Some(p) => tlf!(
-            "Panel canvas: panel {label}, {layers} layers, {camera}",
+            "Panel canvas: panel {label}, {layers} layers, {shapes} annotations, {camera}",
             label = app.project.panel_label(panel_id),
             layers = p.layers.len(),
-            camera = if p.camera.moves() { tl!("camera move") } else { tl!("static camera") }
+            shapes = p.annotations.len(),
+            camera = if p.camera.moves() { tlf!("camera move with {n} keys", n = p.camera.keys.len()) } else { tl!("static camera").to_string() }
         ),
         None => tl!("Panel canvas").to_string(),
     };
@@ -135,11 +155,15 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let tex = app.textures.full(ui.ctx(), &app.project, panel);
     let painter = ui.painter_at(avail.expand(12.0));
     if app.playing {
-        // The animatic: what the camera sees.
-        let v = panel.camera.view(local.min(duration as f32 - 1.0));
-        let uv = egui::Rect::from_min_max(egui::pos2(v[0], v[1]), egui::pos2(v[2], v[3]));
+        // The animatic: what the camera sees, turned frames included (a textured quad).
+        let q = panel.camera.quad(local.min(duration as f32 - 1.0), aspect);
         painter.rect_filled(rect.expand(12.0), 0.0, egui::Color32::BLACK);
-        painter.image(tex, rect, uv, egui::Color32::WHITE);
+        let mut mesh = egui::Mesh::with_texture(tex);
+        for (pos, uv) in [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()].into_iter().zip(q) {
+            mesh.vertices.push(egui::epaint::Vertex { pos, uv: egui::pos2(uv[0], uv[1]), color: egui::Color32::WHITE });
+        }
+        mesh.indices = vec![0, 1, 2, 0, 2, 3];
+        painter.add(egui::Shape::mesh(mesh));
         painter.text(
             rect.left_top() + egui::vec2(8.0, 8.0),
             egui::Align2::LEFT_TOP,
@@ -166,23 +190,36 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         xf.image(&painter, ptex, egui::Color32::from_rgba_unmultiplied(255, 110, 110, 60));
     }
 
-    // Camera frames: start key, end key, and the frame at the playhead.
-    let has_keys = !panel.camera.keys.is_empty();
-    if has_keys || app.tool == CanvasTool::Camera {
-        let first = panel.camera.view(0.0);
-        let last = panel.camera.view(duration as f32 - 1.0);
-        xf.outline_normalized(&painter, first, egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 170, 90)));
-        xf.outline_normalized(&painter, last, egui::Stroke::new(2.0, egui::Color32::from_rgb(220, 120, 40)));
-        if panel.camera.moves() {
-            let now = panel.camera.view(local);
-            xf.outline_normalized(&painter, now, egui::Stroke::new(1.0, egui::Color32::from_rgb(230, 200, 60)));
+    // Camera frames: every key (the selected one bold), and the frame at the playhead, all turned
+    // with the view.
+    if !panel.camera.keys.is_empty() || app.tool == CanvasTool::Camera {
+        let selected = crate::camera_keys::selected_on(app, panel_id);
+        let last = panel.camera.keys.len().saturating_sub(1);
+        for (i, k) in panel.camera.keys.iter().enumerate() {
+            let color = if i == 0 {
+                egui::Color32::from_rgb(60, 170, 90)
+            } else if i == last {
+                egui::Color32::from_rgb(220, 120, 40)
+            } else {
+                egui::Color32::from_rgb(150, 110, 210)
+            };
+            let width = if selected == Some(k.frame) { 3.5 } else { 1.5 };
+            frame_outline(&painter, &xf, k.quad(aspect), egui::Stroke::new(width, color));
+        }
+        if panel.camera.moves() || panel.camera.keys.is_empty() {
+            frame_outline(&painter, &xf, panel.camera.quad(local, aspect), egui::Stroke::new(1.0, egui::Color32::from_rgb(230, 200, 60)));
         }
     }
 
+    // Canvas pixels per screen point (the view rotation does not scale).
+    let k = settings.width as f32 / rect.width().max(1.0);
     let to_canvas = |p: egui::Pos2| {
         let c = xf.to_canvas(p);
         (c[0], c[1])
     };
+    let to_canvas_arr = move |p: egui::Pos2| xf.to_canvas(p);
+    let to_screen = move |p: [f32; 2]| xf.to_screen(p);
+    crate::annotations::overlay(app, &painter, panel_id, &to_screen, 1.0 / k);
     if panning || turning {
         crate::tools::selection::draw_overlay(app, &painter, &xf, panel_id);
         return;
@@ -260,29 +297,29 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             }
         }
         CanvasTool::Camera => {
-            let frame = if app.key_choice == KeyChoice::Start { 0 } else { duration - 1 };
             let drag = resp.drag_delta();
-            let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) } else { 0.0 };
+            let (scroll, shift) =
+                if resp.hovered() { ui.input(|i| (i.smooth_scroll_delta.x + i.smooth_scroll_delta.y, i.modifiers.shift)) } else { (0.0, false) };
             if drag != egui::Vec2::ZERO || scroll != 0.0 {
-                if let Some(p) = app.project.panel_mut(panel_id) {
-                    // A move needs both ends: pin the other end where the camera is before this edit.
-                    let other = if frame == 0 { duration - 1 } else { 0 };
-                    if other != frame && !p.camera.keys.iter().any(|k| k.frame == other) {
-                        let at = p.camera.at(other as f32);
-                        p.camera.set_key(CameraKey { frame: other, ..at });
-                    }
-                    let mut key = p.camera.keys.iter().find(|k| k.frame == frame).copied().unwrap_or_else(|| CameraKey { frame, ..p.camera.at(frame as f32) });
+                // The selected key, or a new one at the playhead.
+                if let Some(mut key) = crate::camera_keys::edit_target(app, panel_id) {
                     let d = xf.delta_normalized(drag);
                     key.center[0] += d.x;
                     key.center[1] += d.y;
-                    key.zoom *= (scroll * 0.003).exp();
-                    p.camera.set_key(key);
+                    if shift {
+                        key.rotation += scroll * 0.05;
+                    } else {
+                        key.zoom *= (scroll * 0.003).exp();
+                    }
+                    crate::camera_keys::set_selected(app, panel_id, key);
                 }
-                app.edited();
             }
         }
         CanvasTool::Lasso | CanvasTool::RectSelect => crate::tools::selection::canvas_input(app, &resp, &xf),
         CanvasTool::Fill => crate::tools::fill_input(app, &resp, &xf),
+        CanvasTool::Select | CanvasTool::Pen | CanvasTool::Arrow | CanvasTool::MotionArrow | CanvasTool::CameraArrow => {
+            crate::annotations::canvas_input(app, &resp, panel_id, &to_canvas_arr, k)
+        }
     }
     crate::tools::selection::draw_overlay(app, &painter, &xf, panel_id);
 }

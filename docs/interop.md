@@ -11,6 +11,7 @@ industry's interchange formats on both sides:
 | Timeline in (conform) | the same four: panel timing back from an editor's cut |
 | Images out | one PNG per panel |
 | Movie out | MP4: H.264 video and AAC sound, optional burn-ins |
+| Annotations | SVG out and in, per panel ([file-format](file-format.md#annotations)) |
 
 ## In: screenplays (Fountain)
 
@@ -70,8 +71,10 @@ extensions, shots) is covered by the hand-written test `fountain::tests::scriptc
 
 File ▸ Export Animatic Timeline ▸ *format*, or `boardcraft-cli export board.boardcraft cut.<ext>`.
 Every format is written by `craft-timeline` (craft-libs) from one neutral model, and comes with
-`<name>_stills/`: `s<scene>_p<panel>.png`, the camera's view at the panel's first frame at the
-project resolution, referenced by absolute path.
+`<name>_stills/`: `s<scene>_p<panel>.png` at the project resolution, referenced by absolute path.
+A static panel's still is the camera's view (annotations included); a panel whose camera moves
+exports its **whole canvas** and the move as Motion keyframes (below). The EDL has no Motion, so
+its stills are always the camera's first frame.
 
 - One video track, one clip per panel in board order, named `Panel <scene>.<panel>`, lasting the
   panel's duration at the project rate.
@@ -92,7 +95,34 @@ own importers (`filmcraft-interchange`), gives one 24 fps sequence of eight clip
 durations, three scene markers and all eight stills found; the EDL's only note is that EDLs carry no
 frame rate (FilmCraft assumes 24).
 
-Camera moves are not carried yet (the stills are each panel's first camera frame).
+### Camera moves as Motion keyframes
+
+A moving panel's clip carries craft-timeline's standard `motion` effect (`fx::MOTION`) with
+keyframes, which each format writes in its own terms: OTIO in the clip's effect metadata, FCP7 XML
+as Basic Motion (`center`, `scale`, `rotation` with `<keyframe>`s), FCPXML as `adjust-transform`
+with `keyframeAnimation`. The sequence is the canvas size and the still is the whole canvas, so
+for the camera at frame *f* (centre *c*, zoom *z*, rotation *r*, after fitting a turned frame to
+the canvas):
+
+| Motion parameter | Value |
+|---|---|
+| `scale` | 100 × *z* percent |
+| `rotation` | −*r* degrees (the picture turns against the camera); written only when a key turns |
+| `position` | frame centre − *z* · R(−*r*) · (*c* − canvas centre), in sequence pixels; anchor stays the still's centre |
+
+Keys are sampled at every frame of the panel (at most 240 a clip; longer panels are sampled
+evenly, always including each camera key and the last frame) with linear interpolation, so the
+editor reproduces BoardCraft's eased, geometric-zoom move exactly at every frame without needing
+any curve type of its own. FilmCraft reads OTIO effects from its own metadata namespace, so a
+moving clip carries its effect list under `metadata.filmcraft` as well as `metadata.boardcraft`.
+
+**Checked against FilmCraft:** the demo board (a push-in, and a pan over three keys ending in a
+6° turn) exported to OTIO, FCP7 XML and FCPXML and opened with FilmCraft's importers gives the two
+moving clips 92 and 76 `position` and `scale` keyframes (plus 76 `rotation` keyframes, 0 → 6°)
+with the expected first and last values; static clips keep the default Motion, and all eight
+stills are found. The EDL imports as before. The transform convention (position, scale, rotation
+about the still's centre) is FilmCraft's Motion; `timeline::tests::motion_reproduces_the_camera_frame`
+checks that it maps the camera frame's corners onto the sequence frame's corners.
 
 ### Sound in the timeline exports
 
@@ -106,7 +136,6 @@ same `<name>_stills/` folder as `sound_<clip id>.<ext>` and referenced by absolu
   and `* SOURCE FILE:`.
 - Conform reads only the video events and tracks, so sound never counts as an unknown clip.
 
-## In: conform timing from an edit
 ## In: conform from an edit
 
 When the editor retimes the animatic, File ▸ Conform Timing from Edit (`boardcraft-cli conform`,
