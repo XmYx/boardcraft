@@ -59,8 +59,35 @@ fn i18n() -> Result<String, String> {
     Ok(out)
 }
 
+/// Windows only: embed the app icon and version info (VERSIONINFO) into `boardcraft.exe`, so it
+/// shows in Explorer, the taskbar, the Start menu and Alt-Tab. A missing resource compiler is a
+/// warning (cross-compiles still link) unless `BOARDCRAFT_REQUIRE_WINRES=1` (release builds).
+fn windows_resources() {
+    println!("cargo::rerun-if-changed=../../assets/app-icon/boardcraft.ico");
+    println!("cargo::rerun-if-env-changed=BOARDCRAFT_REQUIRE_WINRES");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon("../../assets/app-icon/boardcraft.ico")
+        .set("ProductName", "BoardCraft")
+        .set("FileDescription", "BoardCraft storyboards and animatics")
+        .set("CompanyName", "Learning Machines LLC")
+        .set("LegalCopyright", "Copyright (c) the BoardCraft authors. MIT OR Apache-2.0.")
+        .set("OriginalFilename", "boardcraft.exe")
+        .set("InternalName", "boardcraft");
+    if let Err(e) = res.compile() {
+        if std::env::var_os("BOARDCRAFT_REQUIRE_WINRES").is_some() {
+            println!("cargo::error=embedding Windows resources failed: {e}");
+            return;
+        }
+        println!("cargo::warning=boardcraft.exe built without icon/version resources: {e}");
+    }
+}
+
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
+    windows_resources();
     println!("cargo::rerun-if-env-changed=BOARDCRAFT_BUILD_SHA");
     println!("cargo::rerun-if-env-changed=BOARDCRAFT_BUILD_DATE");
     let out_dir = std::env::var_os("OUT_DIR").map(PathBuf::from).unwrap_or_default();

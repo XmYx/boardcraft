@@ -35,6 +35,8 @@ cpal = "0.17"
 craft-keymap = { workspace = true, features = ["ui"] }
 
 [build-dependencies]
+# Icon + VERSIONINFO for boardcraft.exe; build.rs only uses it when the target is Windows.
+winresource = "0.1"
 craft-fonts-build = { workspace = true }
 
 [dev-dependencies]

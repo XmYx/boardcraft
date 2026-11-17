@@ -1,0 +1,69 @@
+{
+  "id": "boardcraft",
+  "name": "BoardCraft",
+  "upgradeCode": "83FEB4DD-3BC7-46D7-B06A-8186B9376AE1",
+  "sources": [
+    "boardcraft.wxs"
+  ],
+  "icon": "assets/app-icon/boardcraft.ico",
+  "localization": [],
+  "extensions": [
+    "UI"
+  ],
+  "payloads": [
+    "NOTICE",
+    "boardcraft-cli.exe",
+    "boardcraft.exe"
+  ],
+  "registry": [
+    [
+      "-1",
+      "Software\\Classes\\Applications\\boardcraft.exe",
+      "FriendlyAppName",
+      "BoardCraft"
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\boardcraft.exe\\shell\\open\\command",
+      "",
+      "\"[#BoardcraftExe]\" \"%1\""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\boardcraft.exe\\SupportedTypes",
+      ".boardcraft",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\boardcraft.exe\\SupportedTypes",
+      ".fountain",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\boardcraft.exe\\SupportedTypes",
+      ".fdx",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\.fountain\\OpenWithProgids",
+      "BoardCraft.Board",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\.fdx\\OpenWithProgids",
+      "BoardCraft.Board",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\boardcraft.exe",
+      "",
+      "[#BoardcraftExe]"
+    ]
+  ],
+  "mode": "dualScope"
+}

@@ -1,36 +1,85 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- BoardCraft Windows installer (WiX v4/v5). Built by packaging/windows/package.ps1.
-     UpgradeCode is BoardCraft's own and must never change: it ties every version together. -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="BoardCraft" Manufacturer="Learning Machines LLC" Version="$(var.Version)" UpgradeCode="83FEB4DD-3BC7-46D7-B06A-8186B9376AE1" Scope="perUserOrMachine">
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <?ifndef HasCraftFontLicences ?>
+  <?define HasCraftFontLicences=0 ?>
+  <?endif?>
+  <Package Name="BoardCraft" Manufacturer="Learning Machines LLC" Version="$(var.Version)" UpgradeCode="83FEB4DD-3BC7-46D7-B06A-8186B9376AE1" Scope="perUserOrMachine" Compressed="yes" Language="1033">
     <SummaryInformation Description="BoardCraft storyboards and animatics" Manufacturer="Learning Machines LLC" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of BoardCraft is already installed." />
-    <MediaTemplate EmbedCab="yes" />
-    <Icon Id="BoardcraftExe" SourceFile="$(var.Icon)" />
-    <Property Id="ARPPRODUCTICON" Value="BoardcraftExe" />
+    <?include $(sys.SOURCEFILEDIR)install-policy.wxi?>
+    <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
+         (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of BoardCraft is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="BoardcraftIcon.ico" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="BoardcraftIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://getartcraft.com/apps/boardcraft" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://getartcraft.com/apps/boardcraft" />
+    <Property Id="ARPHELPLINK" Value="https://discord.gg/artcraft" />
+
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="INSTALLFOLDER" Name="BoardCraft" />
+      <Directory Id="CraftSuiteFolder" Name="ArtCraft">
+        <Directory Id="INSTALLFOLDER" Name="BoardCraft" />
+      </Directory>
     </StandardDirectory>
-    <Feature Id="Main" Title="BoardCraft">
-      <ComponentGroupRef Id="Files" />
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="BoardCraft" Level="1">
+      <?if $(var.HasCraftFontLicences) = 1 ?>
+      <ComponentGroupRef Id="CraftFontLicences" />
+      <?endif?>
+      <ComponentGroupRef Id="BoardcraftFiles" />
     </Feature>
-    <ComponentGroup Id="Files" Directory="INSTALLFOLDER">
-      <Component Id="BoardcraftApp" Guid="5A9D1455-BF90-4A11-ACC2-FF70F0CE2C6A">
-        <File Id="BoardcraftExeFile" Source="$(var.BinDir)\boardcraft.exe" KeyPath="yes" />
-        <File Id="BoardcraftCliFile" Source="$(var.BinDir)\boardcraft-cli.exe" />
-        <File Id="LicenseMit" Source="$(var.Root)\LICENSE-MIT" />
-        <File Id="LicenseApache" Source="$(var.Root)\LICENSE-APACHE" />
-        <File Id="Notice" Source="$(var.Root)\NOTICE" />
-        <File Id="Attribution" Source="$(var.Root)\ATTRIBUTION.md" />
-        <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="BoardCraft" Description="Storyboards and animatics" Target="[INSTALLFOLDER]boardcraft.exe" WorkingDirectory="INSTALLFOLDER" Icon="BoardcraftExe" />
+  <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" Condition="NOT Installed" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2" Condition="NOT Installed" />
+    </UI>
+  </Package>
+
+  <Fragment>
+    <?if $(var.HasCraftFontLicences) = 1 ?>
+    <ComponentGroup Id="CraftFontLicences" Directory="INSTALLFOLDER">
+      <Files Include="$(var.DocsDir)\**" />
+    </ComponentGroup>
+    <?endif?>
+    <ComponentGroup Id="BoardcraftFiles" Directory="INSTALLFOLDER">
+      <Component Id="BoardcraftApp" Guid="C77C1875-56DE-4226-9458-4004ADCA8570">
+        <File Id="BoardcraftNotice" Source="$(var.BinDir)\NOTICE" KeyPath="no" />
+        <File Id="BoardcraftExe" Source="$(var.BinDir)\boardcraft.exe" KeyPath="yes">
+          <!-- No Icon here, so the shortcut shows the icon embedded in boardcraft.exe (build.rs). An
+               MSI Icon is cached under %APPDATA%\Microsoft\Installer\{ProductCode}\, and every
+               update is a major upgrade with a new ProductCode that deletes the old folder. A
+               taskbar pin is a copy of this shortcut that the update never touches, so it kept
+               pointing at the deleted file and lost its icon (#1114). The exe's path survives
+               updates; the shortcut is not advertised, so it targets that path and its icon is the
+               exe's own. The Icon above stays for ARPPRODUCTICON (Apps and features). -->
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="BoardCraft" Description="BoardCraft storyboards and animatics" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+        </File>
+
+        <!-- .boardcraft: BoardCraft's own format. -->
         <ProgId Id="BoardCraft.Board" Description="BoardCraft Board" Icon="BoardcraftExe" IconIndex="0">
           <Extension Id="boardcraft" ContentType="application/vnd.storytold.boardcraft+zip">
-            <Verb Id="open" Command="Open" TargetFile="BoardcraftExeFile" Argument="&quot;%1&quot;" />
+            <Verb Id="open" Command="Open" TargetFile="BoardcraftExe" Argument="&quot;%1&quot;" />
           </Extension>
         </ProgId>
+
+        <!-- "Open with" for screenplays (Fountain, Final Draft), without becoming the default. -->
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\boardcraft.exe" Name="FriendlyAppName" Value="BoardCraft" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\boardcraft.exe\shell\open\command" Value="&quot;[#BoardcraftExe]&quot; &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\boardcraft.exe\SupportedTypes" Name=".boardcraft" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\boardcraft.exe\SupportedTypes" Name=".fountain" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\boardcraft.exe\SupportedTypes" Name=".fdx" Value="" Type="string" />
         <RegistryValue Root="HKMU" Key="Software\Classes\.fountain\OpenWithProgids" Name="BoardCraft.Board" Value="" Type="string" />
         <RegistryValue Root="HKMU" Key="Software\Classes\.fdx\OpenWithProgids" Name="BoardCraft.Board" Value="" Type="string" />
+
+        <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\boardcraft.exe" Value="[#BoardcraftExe]" Type="string" />
+      <RegistryValue Root="HKMU" Key="Software\BoardCraft" Name="InstallDir" Value="[INSTALLFOLDER]" Type="string" />
+      </Component>
+
+      <Component Id="BoardcraftCli">
+        <File Id="BoardcraftCliExe" Source="$(var.BinDir)\boardcraft-cli.exe" KeyPath="yes" />
       </Component>
     </ComponentGroup>
-  </Package>
+  </Fragment>
 </Wix>
