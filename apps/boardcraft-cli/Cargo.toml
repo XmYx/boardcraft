@@ -1,0 +1,15 @@
+[package]
+name = "boardcraft-cli"
+description = "BoardCraft command line: board screenplays, run board commands, export animatics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+boardcraft-core = { workspace = true }
+serde_json = { workspace = true }

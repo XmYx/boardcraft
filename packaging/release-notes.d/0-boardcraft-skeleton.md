@@ -1,0 +1,1 @@
+- First preview: board a Fountain screenplay, sketch and time panels, frame camera moves, play the animatic and export it to FilmCraft (OpenTimelineIO).

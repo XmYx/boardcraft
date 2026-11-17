@@ -1,0 +1,280 @@
+//! Every edit is a command.
+//!
+//! A [`Command`] is a serializable description of one change to a [`Project`]; [`apply`] performs
+//! it and returns what changed. The app, `boardcraft-cli` (`boardcraft-cli exec`) and tests drive
+//! the board through the same commands, so every feature is scriptable by agents. Commands are JSON
+//! with a `"cmd"` tag, for example `{"cmd": "set_duration", "panel": 3, "frames": 48}`.
+
+use serde::{Deserialize, Serialize};
+
+use crate::camera::CameraKey;
+use crate::error::{Error, Result};
+use crate::fountain;
+use crate::model::{Id, MAX_PANEL_FRAMES, Project};
+
+/// A panel text field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextField {
+    Dialogue,
+    Action,
+    Notes,
+}
+
+/// One change to a board.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "cmd", rename_all = "snake_case")]
+pub enum Command {
+    /// Append a scene with one blank panel.
+    AddScene {
+        heading: String,
+    },
+    /// Add a blank panel after `after` (or at the end of `scene`).
+    AddPanel {
+        scene: Option<Id>,
+        after: Option<Id>,
+    },
+    DeletePanel {
+        panel: Id,
+    },
+    /// Move a panel one step earlier or later in board order.
+    MovePanel {
+        panel: Id,
+        later: bool,
+    },
+    SetDuration {
+        panel: Id,
+        frames: u32,
+    },
+    SetText {
+        panel: Id,
+        field: TextField,
+        text: String,
+    },
+    SetSceneHeading {
+        scene: Id,
+        heading: String,
+    },
+    /// Add or replace the camera key on `key.frame`.
+    SetCameraKey {
+        panel: Id,
+        key: CameraKey,
+    },
+    RemoveCameraKey {
+        panel: Id,
+        frame: u32,
+    },
+    ClearCamera {
+        panel: Id,
+    },
+    AddLayer {
+        panel: Id,
+        name: String,
+    },
+    DeleteLayer {
+        panel: Id,
+        layer: Id,
+    },
+    SetLayerVisible {
+        panel: Id,
+        layer: Id,
+        visible: bool,
+    },
+    SetLayerOpacity {
+        panel: Id,
+        layer: Id,
+        opacity: f32,
+    },
+    /// Append the scenes of a Fountain screenplay.
+    ImportFountain {
+        text: String,
+    },
+}
+
+/// What a command did.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Outcome {
+    /// An id the command created (scene, panel or layer), if any.
+    pub created: Option<Id>,
+    /// A short description for a status bar or log.
+    pub message: String,
+}
+
+fn panel_missing(id: Id) -> Error {
+    Error::NotFound(format!("panel {}", id.0))
+}
+
+fn ok(message: impl Into<String>) -> Result<Outcome> {
+    Ok(Outcome { created: None, message: message.into() })
+}
+
+/// Apply `cmd` to `project`. On error the project is unchanged.
+pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
+    match cmd {
+        Command::AddScene { heading } => {
+            let s = project.add_scene(heading);
+            let p = project.add_panel(s, None)?;
+            Ok(Outcome { created: Some(p), message: format!("added scene {}", project.scene(s).map(|x| x.number.as_str()).unwrap_or("")) })
+        }
+        Command::AddPanel { scene, after } => {
+            let scene = match (scene, after) {
+                (Some(s), _) => *s,
+                (None, Some(a)) => project.scene_of(*a).map(|s| s.id).ok_or_else(|| panel_missing(*a))?,
+                (None, None) => match project.scenes.last() {
+                    Some(s) => s.id,
+                    None => project.add_scene(""),
+                },
+            };
+            let id = project.add_panel(scene, *after)?;
+            Ok(Outcome { created: Some(id), message: format!("added panel {}", project.panel_label(id)) })
+        }
+        Command::DeletePanel { panel } => {
+            if project.panel(*panel).is_none() {
+                return Err(panel_missing(*panel));
+            }
+            if project.panel_count() <= 1 {
+                return Err(Error::Unsupported("a board keeps at least one panel".into()));
+            }
+            project.delete_panel(*panel);
+            project.scenes.retain(|s| !s.panels.is_empty());
+            ok("deleted panel")
+        }
+        Command::MovePanel { panel, later } => {
+            if project.panel(*panel).is_none() {
+                return Err(panel_missing(*panel));
+            }
+            let moved = project.move_panel(*panel, *later);
+            project.scenes.retain(|s| !s.panels.is_empty());
+            ok(if moved { "moved panel" } else { "panel is already at the end" })
+        }
+        Command::SetDuration { panel, frames } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            p.duration = (*frames).clamp(1, MAX_PANEL_FRAMES);
+            ok(format!("duration {} frames", p.duration))
+        }
+        Command::SetText { panel, field, text } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            let target = match field {
+                TextField::Dialogue => &mut p.dialogue,
+                TextField::Action => &mut p.action,
+                TextField::Notes => &mut p.notes,
+            };
+            target.clone_from(text);
+            ok("text set")
+        }
+        Command::SetSceneHeading { scene, heading } => {
+            let s = project.scene_mut(*scene).ok_or_else(|| Error::NotFound(format!("scene {}", scene.0)))?;
+            s.heading.clone_from(heading);
+            ok("heading set")
+        }
+        Command::SetCameraKey { panel, key } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            p.camera.set_key(*key);
+            ok("camera key set")
+        }
+        Command::RemoveCameraKey { panel, frame } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            if p.camera.remove_key(*frame) { ok("camera key removed") } else { Err(Error::NotFound(format!("camera key on frame {frame}"))) }
+        }
+        Command::ClearCamera { panel } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            p.camera.keys.clear();
+            ok("camera cleared")
+        }
+        Command::AddLayer { panel, name } => {
+            if project.panel(*panel).is_none() {
+                return Err(panel_missing(*panel));
+            }
+            let layer = project.new_layer(name);
+            let id = layer.id;
+            if let Some(p) = project.panel_mut(*panel) {
+                p.layers.push(layer);
+                p.touch();
+            }
+            Ok(Outcome { created: Some(id), message: "added layer".into() })
+        }
+        Command::DeleteLayer { panel, layer } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            if p.layer(*layer).is_none() {
+                return Err(Error::NotFound(format!("layer {}", layer.0)));
+            }
+            if p.layers.len() <= 1 {
+                return Err(Error::Unsupported("a panel keeps at least one layer".into()));
+            }
+            p.layers.retain(|l| l.id != *layer);
+            p.touch();
+            ok("deleted layer")
+        }
+        Command::SetLayerVisible { panel, layer, visible } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            p.layer_mut(*layer).ok_or_else(|| Error::NotFound(format!("layer {}", layer.0)))?.visible = *visible;
+            p.touch();
+            ok("layer visibility set")
+        }
+        Command::SetLayerOpacity { panel, layer, opacity } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            let o = if opacity.is_finite() { opacity.clamp(0.0, 1.0) } else { 1.0 };
+            p.layer_mut(*layer).ok_or_else(|| Error::NotFound(format!("layer {}", layer.0)))?.opacity = o;
+            p.touch();
+            ok("layer opacity set")
+        }
+        Command::ImportFountain { text } => {
+            let script = fountain::parse(text);
+            let (s, n) = fountain::append_to_project(project, &script);
+            ok(format!("added {s} scenes, {n} panels"))
+        }
+    }
+}
+
+/// Parse a command from JSON.
+pub fn parse(json: &str) -> Result<Command> {
+    serde_json::from_str(json).map_err(|e| Error::Format(format!("command: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_commands_drive_a_board() {
+        let mut p = Project::blank("t");
+        let first = p.scenes[0].panels[0].id;
+        let out = apply(&mut p, &parse(&format!(r#"{{"cmd":"add_panel","after":{}}}"#, first.0)).unwrap()).unwrap();
+        let second = out.created.unwrap();
+        apply(&mut p, &parse(&format!(r#"{{"cmd":"set_duration","panel":{},"frames":12}}"#, second.0)).unwrap()).unwrap();
+        apply(&mut p, &parse(&format!(r#"{{"cmd":"set_text","panel":{},"field":"dialogue","text":"BOB: Hi"}}"#, second.0)).unwrap()).unwrap();
+        apply(&mut p, &Command::SetCameraKey { panel: second, key: CameraKey { frame: 11, center: [0.6, 0.5], zoom: 2.0 } }).unwrap();
+        apply(&mut p, &Command::MovePanel { panel: second, later: false }).unwrap();
+        assert_eq!(p.scenes[0].panels[0].id, second);
+        assert_eq!(p.panel(second).unwrap().duration, 12);
+        assert_eq!(p.panel(second).unwrap().dialogue, "BOB: Hi");
+        assert_eq!(p.panel(second).unwrap().camera.keys.len(), 1);
+        apply(&mut p, &Command::ImportFountain { text: "INT. A\n\nRain.\n".into() }).unwrap();
+        assert_eq!(p.scenes.len(), 2);
+    }
+
+    #[test]
+    fn errors_leave_the_board_alone() {
+        let mut p = Project::blank("t");
+        let before = p.clone();
+        let only = p.scenes[0].panels[0].id;
+        assert!(apply(&mut p, &Command::DeletePanel { panel: only }).is_err());
+        assert!(apply(&mut p, &Command::SetDuration { panel: Id(999), frames: 3 }).is_err());
+        let layer = p.scenes[0].panels[0].layers[0].id;
+        assert!(apply(&mut p, &Command::DeleteLayer { panel: only, layer }).is_err());
+        assert!(parse(r#"{"cmd":"explode"}"#).is_err());
+        assert!(parse("not json").is_err());
+        assert_eq!(p, before);
+    }
+
+    #[test]
+    fn hostile_values_are_clamped() {
+        let mut p = Project::blank("t");
+        let id = p.scenes[0].panels[0].id;
+        let layer = p.scenes[0].panels[0].layers[0].id;
+        apply(&mut p, &Command::SetDuration { panel: id, frames: u32::MAX }).unwrap();
+        apply(&mut p, &Command::SetLayerOpacity { panel: id, layer, opacity: f32::NAN }).unwrap();
+        assert_eq!(p.panel(id).unwrap().duration, MAX_PANEL_FRAMES);
+        assert_eq!(p.panel(id).unwrap().layers[0].opacity, 1.0);
+    }
+}

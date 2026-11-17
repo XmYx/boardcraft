@@ -5,6 +5,8 @@ use boardcraft_core::Id;
 use crate::app::{BoardApp, View};
 
 const CARD_W: f32 = 232.0;
+/// Camera badge ink: 5.9:1 on panel paper.
+pub const CAM_INK: egui::Color32 = egui::Color32::from_rgb(170, 60, 20);
 
 enum Action {
     Select(Id),
@@ -23,13 +25,15 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let aspect = app.project.settings.height as f32 / app.project.settings.width.max(1) as f32;
     let live = app.stroke.is_none();
     let selected = app.selected;
+    let focus_selected = std::mem::take(&mut app.focus_selected);
+    let mut card_focused = false;
     let project = &app.project;
     let textures = &mut app.textures;
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         for scene in &project.scenes {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.heading(format!("Scene {}", scene.number));
+                ui.heading(tlf!("Scene {number}", number = scene.number));
                 ui.label(egui::RichText::new(&scene.heading).strong());
             });
             ui.horizontal_wrapped(|ui| {
@@ -39,8 +43,17 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                     let thumb_h = CARD_W * aspect;
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(CARD_W, thumb_h + 48.0), egui::Sense::click());
                     let resp = resp.on_hover_text(if panel.action.is_empty() { &panel.dialogue } else { &panel.action });
-                    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected == Some(panel.id), format!("Panel {label}")));
-                    if resp.clicked() {
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected == Some(panel.id), tlf!("Panel {label}", label = label)));
+                    card_focused |= resp.has_focus();
+                    if focus_selected && selected == Some(panel.id) {
+                        resp.request_focus();
+                        resp.scroll_to_me(None);
+                    }
+                    let enter = resp.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    if enter && selected == Some(panel.id) {
+                        // Enter on the selected card opens it, as a double-click does.
+                        action = Some(Action::Open(panel.id));
+                    } else if resp.clicked() || (resp.gained_focus() && selected != Some(panel.id)) {
                         action = Some(Action::Select(panel.id));
                     }
                     if resp.double_clicked() {
@@ -62,9 +75,9 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                             p.text(
                                 img_rect.right_top() + egui::vec2(-6.0, 4.0),
                                 egui::Align2::RIGHT_TOP,
-                                "CAM",
+                                tl!("CAM"),
                                 egui::FontId::proportional(11.0),
-                                egui::Color32::from_rgb(200, 90, 40),
+                                CAM_INK,
                             );
                         }
                         let text = ui.visuals().text_color();
@@ -80,13 +93,20 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                         p.text(egui::pos2(rect.left(), img_rect.bottom() + 22.0), egui::Align2::LEFT_TOP, line, egui::FontId::proportional(12.0), weak);
                     }
                 }
-                if ui.add_sized([60.0, CARD_W * aspect], egui::Button::new("+")).on_hover_text("New panel at the end of this scene").clicked() {
+                if ui.add_sized([60.0, CARD_W * aspect], egui::Button::new(tl!("+ Panel"))).on_hover_text(tl!("New panel at the end of this scene")).clicked() {
                     action = Some(Action::AddPanel(scene.id));
                 }
             });
             ui.separator();
         }
     });
+    // Arrow keys on a focused card step through the panels (focus follows the selection).
+    if card_focused {
+        let (l, r) = ui.input(|i| (i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight)));
+        if l || r {
+            app.step_selection(if r { 1 } else { -1 });
+        }
+    }
     match action {
         Some(Action::Select(id)) => app.select_and_seek(id),
         Some(Action::Open(id)) => {

@@ -27,7 +27,7 @@ time the panels and play the animatic, then send the cut to FilmCraft.
 
 ![BoardCraft: the demo board in the panel grid, with the animatic timeline below](docs/images/boardcraft-board.png)
 
-[What works today](#what-works-today) · [Getting started](#getting-started) · [Pipeline](#pipeline) ·
+[What works today](#what-works-today) · [Getting started](#getting-started) · [Pipeline](#pipeline) · [Downloads](#downloads) ·
 [Roadmap](#roadmap) · [The Crafting Apps](#the-crafting-apps) · [License and credits](#license-and-credits)
 
 ## What works today
@@ -54,6 +54,13 @@ time the panels and play the animatic, then send the cut to FilmCraft.
 - **Open project format.** `.boardcraft` is a ZIP of `project.json` plus one PNG per layer,
   documented in [docs/file-format.md](docs/file-format.md). Saves are atomic.
 
+- **Commands and CLI.** Every board edit is a command; `boardcraft-cli` runs them headless and
+  exports, for scripts and agents ([docs/cli.md](docs/cli.md)).
+- **Accessible.** Every control has an AccessKit name; panels, timeline blocks and the canvas
+  publish nodes; every drag has a keyboard or typed alternative; checked by kittest tests.
+- **Languages.** Interface text goes through craft-i18n; translations arrive with
+  `CRAFT_I18N_DIR` (English until BoardCraft's catalog exists).
+
 Stubbed: **AI panel sketch** declares its role to the shared Craft AI layer and builds the prompt,
 but does not call a model yet ([docs/gaps.md](docs/gaps.md)).
 
@@ -72,7 +79,9 @@ cargo run --release -p boardcraft -- my.boardcraft   # open a project
 | Keys | |
 |---|---|
 | Space | play / pause the animatic |
-| ← → | previous / next panel |
+| ← → | previous / next panel (moves keyboard focus to it) |
+| Enter | open the focused panel in the Panel view |
+| , . / Home | playhead one frame back / forward / to the start |
 | V | Board view ↔ Panel view |
 | B / E / C | brush / eraser / camera tool |
 | [ ] | smaller / larger brush |
@@ -80,10 +89,22 @@ cargo run --release -p boardcraft -- my.boardcraft   # open a project
 | Ctrl+Z, Ctrl+Shift+Z | undo / redo drawing |
 | Ctrl+N | new panel after the selected one |
 
+Optional build inputs (never Cargo dependencies), as in the other Craft apps:
+
+```bash
+CRAFT_I18N_DIR=$PWD/../craft-i18n CRAFT_FONTS_DIR=$PWD/../craft-fonts cargo run --release -p boardcraft
+```
+
+Headless:
+
+```bash
+cargo run -p boardcraft-cli -- new board.boardcraft --from script.fountain
+```
+
 Checks before every commit:
 
 ```bash
-cargo xtask ci     # fmt, clippy -D warnings, tests, layering, asset attribution
+cargo xtask ci     # fmt, clippy -D warnings, tests, layering, assets, licences, progress fragments
 ```
 
 ## Pipeline
@@ -94,6 +115,11 @@ cargo xtask ci     # fmt, clippy -D warnings, tests, layering, asset attribution
   `<name>_stills/`; open the `.otio` in FilmCraft with File ▸ Import.
 
 Details: [docs/interop.md](docs/interop.md).
+
+## Downloads
+
+None yet: BoardCraft has not had a release. Packages will be named
+`boardcraft-<version>-<platform>-<arch>.<ext>` (Linux tar.gz/deb/rpm from `packaging/linux/package.sh`).
 
 ## Roadmap
 

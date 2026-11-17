@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use boardcraft_core::command::{self, Command};
 use boardcraft_core::{Brush, Id, Project, Raster, Tool, format, fountain, otio};
 
 use crate::args::{Cli, StartView};
@@ -79,6 +80,10 @@ pub struct BoardApp {
     frames_until_shot: u32,
     shot_done: Arc<AtomicBool>,
     last_title: String,
+    /// Move keyboard focus to the selected panel's card or block on the next frame.
+    pub focus_selected: bool,
+    /// Interface language code, `None` = the system's.
+    pub language: Option<String>,
 }
 
 fn pick_layer(project: &Project, panel: Option<Id>) -> Option<Id> {
@@ -93,7 +98,10 @@ impl BoardApp {
 
     /// Set up the app on an egui context (also used by the UI tests).
     pub fn with_context(ctx: &egui::Context, cli: Cli) -> Self {
-        ctx.set_theme(egui::Theme::Dark);
+        // Light or dark follows the system (both themes meet 4.5:1 for text).
+        crate::i18n::install_fonts(ctx);
+        apply_contrast(ctx);
+        crate::i18n::set_language(None);
         let mut app = Self {
             project: Project::blank("Untitled board"),
             path: None,
@@ -120,10 +128,12 @@ impl BoardApp {
             frames_until_shot: 12,
             shot_done: Arc::new(AtomicBool::new(false)),
             last_title: String::new(),
+            focus_selected: false,
+            language: None,
         };
         if cli.demo {
             app.replace_project(boardcraft_core::demo::demo_project(), None);
-            app.status = "Demo board: Paper Boats".into();
+            app.status = tl!("Demo board: Paper Boats").into();
         }
         if let Some(file) = &cli.file {
             app.open_path(file);
@@ -185,18 +195,18 @@ impl BoardApp {
                     let n = project.panel_count();
                     self.replace_project(project, None);
                     self.dirty = true;
-                    self.status = format!("Boarded {} scenes, {n} panels from {}", script.scenes.len(), path.display());
+                    self.status = tlf!("Boarded {scenes} scenes, {n} panels from {file}", scenes = script.scenes.len(), n = n, file = path.display());
                 }
-                Err(e) => self.status = format!("Could not read {}: {e}", path.display()),
+                Err(e) => self.status = tlf!("Could not read {file}: {error}", file = path.display(), error = e),
             }
             return;
         }
         match format::load(path) {
             Ok(p) => {
                 self.replace_project(p, Some(path.to_path_buf()));
-                self.status = format!("Opened {}", path.display());
+                self.status = tlf!("Opened {file}", file = path.display());
             }
-            Err(e) => self.status = format!("Could not open: {e}"),
+            Err(e) => self.status = tlf!("Could not open: {error}", error = e),
         }
     }
 
@@ -205,7 +215,9 @@ impl BoardApp {
     }
 
     pub fn open_dialog(&mut self) {
-        if let Some(p) = Self::dialog().add_filter("BoardCraft project", &[format::EXTENSION]).add_filter("Fountain screenplay", &["fountain"]).pick_file() {
+        if let Some(p) =
+            Self::dialog().add_filter(tl!("BoardCraft project"), &[format::EXTENSION]).add_filter(tl!("Fountain screenplay"), &["fountain"]).pick_file()
+        {
             self.open_path(&p);
         }
     }
@@ -219,7 +231,7 @@ impl BoardApp {
 
     pub fn save_as(&mut self) -> bool {
         let name = format!("{}.{}", self.project.name, format::EXTENSION);
-        match Self::dialog().add_filter("BoardCraft project", &[format::EXTENSION]).set_file_name(name).save_file() {
+        match Self::dialog().add_filter(tl!("BoardCraft project"), &[format::EXTENSION]).set_file_name(name).save_file() {
             Some(mut p) => {
                 if p.extension().is_none() {
                     p.set_extension(format::EXTENSION);
@@ -235,18 +247,18 @@ impl BoardApp {
             Ok(()) => {
                 self.path = Some(path.to_path_buf());
                 self.dirty = false;
-                self.status = format!("Saved {}", path.display());
+                self.status = tlf!("Saved {file}", file = path.display());
                 true
             }
             Err(e) => {
-                self.status = format!("Save failed: {e}");
+                self.status = tlf!("Save failed: {error}", error = e);
                 false
             }
         }
     }
 
     pub fn import_fountain(&mut self) {
-        let Some(path) = Self::dialog().add_filter("Fountain screenplay", &["fountain", "spmd", "txt"]).pick_file() else { return };
+        let Some(path) = Self::dialog().add_filter(tl!("Fountain screenplay"), &["fountain", "spmd", "txt"]).pick_file() else { return };
         match std::fs::read(&path) {
             Ok(bytes) => {
                 let script = fountain::parse(&String::from_utf8_lossy(&bytes));
@@ -256,27 +268,27 @@ impl BoardApp {
                     let p = fountain::project_from_script(&script, self.project.settings);
                     self.replace_project(p, None);
                     self.dirty = true;
-                    self.status = format!("Boarded {} scenes from {}", script.scenes.len(), path.display());
+                    self.status = tlf!("Boarded {scenes} scenes from {file}", scenes = script.scenes.len(), file = path.display());
                 } else {
                     let (s, n) = fountain::append_to_project(&mut self.project, &script);
                     self.dirty = true;
-                    self.status = format!("Added {s} scenes, {n} panels from {}", path.display());
+                    self.status = tlf!("Added {scenes} scenes, {n} panels from {file}", scenes = s, n = n, file = path.display());
                 }
             }
-            Err(e) => self.status = format!("Could not read {}: {e}", path.display()),
+            Err(e) => self.status = tlf!("Could not read {file}: {error}", file = path.display(), error = e),
         }
     }
 
     pub fn import_image(&mut self) {
         let Some(panel) = self.selected else {
-            self.status = "Select a panel first".into();
+            self.status = tl!("Select a panel first").into();
             return;
         };
-        let Some(path) = Self::dialog().add_filter("Images", &["png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp", "gif"]).pick_file() else { return };
+        let Some(path) = Self::dialog().add_filter(tl!("Images"), &["png", "jpg", "jpeg", "webp", "tif", "tiff", "bmp", "gif"]).pick_file() else { return };
         let decoded = std::fs::read(&path).map_err(|e| e.to_string()).and_then(|b| Raster::decode(&b).map_err(|e| e.to_string()));
         match decoded {
             Ok(img) => {
-                let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Image".into());
+                let name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| tl!("Image").into());
                 let mut layer = self.project.new_layer(&name);
                 layer.pixels.place_fit(&img);
                 let id = layer.id;
@@ -287,27 +299,29 @@ impl BoardApp {
                 }
                 self.active_layer = Some(id);
                 self.dirty = true;
-                self.status = format!("Imported {}", path.display());
+                self.status = tlf!("Imported {file}", file = path.display());
             }
-            Err(e) => self.status = format!("Could not import {}: {e}", path.display()),
+            Err(e) => self.status = tlf!("Could not import {file}: {error}", file = path.display(), error = e),
         }
     }
 
     pub fn export_animatic(&mut self) {
-        let Some(path) = Self::dialog().add_filter("OpenTimelineIO", &["otio"]).set_file_name(format!("{}.otio", self.project.name)).save_file() else {
+        let Some(path) = Self::dialog().add_filter(tl!("OpenTimelineIO"), &["otio"]).set_file_name(format!("{}.otio", self.project.name)).save_file() else {
             return;
         };
         match otio::export_animatic(&self.project, &path) {
-            Ok(stills) => self.status = format!("Exported {} (stills in {}) — open it in FilmCraft with File ▸ Import", path.display(), stills.display()),
-            Err(e) => self.status = format!("Export failed: {e}"),
+            Ok(stills) => {
+                self.status = tlf!("Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.", file = path.display(), dir = stills.display())
+            }
+            Err(e) => self.status = tlf!("Export failed: {error}", error = e),
         }
     }
 
     pub fn export_pngs(&mut self) {
         let Some(dir) = Self::dialog().pick_folder() else { return };
         match otio::write_stills(&self.project, &dir) {
-            Ok(files) => self.status = format!("Wrote {} panel images to {}", files.len(), dir.display()),
-            Err(e) => self.status = format!("Export failed: {e}"),
+            Ok(files) => self.status = tlf!("Wrote {n} panel images to {dir}", n = files.len(), dir = dir.display()),
+            Err(e) => self.status = tlf!("Export failed: {error}", error = e),
         }
     }
 
@@ -316,7 +330,7 @@ impl BoardApp {
         let result = boardcraft_core::ai::panel_request(&self.project, panel).and_then(|r| boardcraft_core::ai::generate_panel_image(&r));
         match result {
             Ok(img) => {
-                let mut layer = self.project.new_layer("AI sketch");
+                let mut layer = self.project.new_layer(tl!("AI sketch"));
                 layer.pixels.place_fit(&img);
                 if let Some(p) = self.project.panel_mut(panel) {
                     p.layers.insert(0, layer);
@@ -332,57 +346,51 @@ impl BoardApp {
     // Edits
     // ---------------------------------------------------------------------------------------
 
-    pub fn add_panel(&mut self) {
-        let (scene, after) = match self.selected.and_then(|id| self.project.scene_of(id).map(|s| (s.id, id))) {
-            Some((s, id)) => (s, Some(id)),
-            None => match self.project.scenes.last() {
-                Some(s) => (s.id, None),
-                None => (self.project.add_scene(""), None),
-            },
-        };
-        match self.project.add_panel(scene, after) {
-            Ok(id) => {
-                self.select_and_seek(id);
+    /// Run a board command, reporting errors in the status bar. Returns its outcome.
+    pub fn run(&mut self, cmd: Command) -> Option<boardcraft_core::command::Outcome> {
+        match command::apply(&mut self.project, &cmd) {
+            Ok(out) => {
                 self.dirty = true;
+                self.textures.retain(&self.project);
+                Some(out)
             }
-            Err(e) => self.status = e.to_string(),
+            Err(e) => {
+                self.status = e.to_string();
+                None
+            }
+        }
+    }
+
+    pub fn add_panel(&mut self) {
+        let scene = if self.selected.is_none() { self.project.scenes.last().map(|s| s.id) } else { None };
+        if let Some(id) = self.run(Command::AddPanel { scene, after: self.selected }).and_then(|o| o.created) {
+            self.select_and_seek(id);
         }
     }
 
     pub fn add_scene(&mut self) {
-        let s = self.project.add_scene("NEW SCENE");
-        if let Ok(id) = self.project.add_panel(s, None) {
+        if let Some(id) = self.run(Command::AddScene { heading: "NEW SCENE".into() }).and_then(|o| o.created) {
             self.select_and_seek(id);
         }
-        self.dirty = true;
     }
 
     pub fn delete_panel(&mut self) {
         let Some(id) = self.selected else { return };
-        if self.project.panel_count() <= 1 {
-            self.status = "A board keeps at least one panel".into();
-            return;
-        }
         let next = {
             let ids: Vec<Id> = self.project.panels().map(|(_, p)| p.id).collect();
             let i = ids.iter().position(|x| *x == id).unwrap_or(0);
             ids.get(i + 1).or_else(|| i.checked_sub(1).and_then(|j| ids.get(j))).copied()
         };
-        self.project.delete_panel(id);
-        self.project.scenes.retain(|s| !s.panels.is_empty());
-        self.undo.retain(|u| u.panel != id);
-        self.redo.retain(|u| u.panel != id);
-        self.textures.retain(&self.project);
-        self.select(next);
-        self.dirty = true;
+        if self.run(Command::DeletePanel { panel: id }).is_some() {
+            self.undo.retain(|u| u.panel != id);
+            self.redo.retain(|u| u.panel != id);
+            self.select(next);
+        }
     }
 
     pub fn move_panel(&mut self, later: bool) {
-        if let Some(id) = self.selected
-            && self.project.move_panel(id, later)
-        {
-            self.project.scenes.retain(|s| !s.panels.is_empty());
-            self.dirty = true;
+        if let Some(id) = self.selected {
+            self.run(Command::MovePanel { panel: id, later });
         }
     }
 
@@ -392,6 +400,7 @@ impl BoardApp {
         let j = (i + delta).clamp(0, ids.len() as isize - 1);
         if let Some(id) = ids.get(j as usize) {
             self.select_and_seek(*id);
+            self.focus_selected = true;
         }
     }
 
@@ -525,13 +534,25 @@ impl BoardApp {
         if !plain {
             return;
         }
-        if space {
+        // Space activates a focused button; it plays only when nothing has focus.
+        if space && ctx.memory(|m| m.focused().is_none()) {
             self.toggle_play();
         }
-        if left {
+        // Keyboard alternatives to dragging the playhead: , and . step a frame, Home goes to the start.
+        let (back, fwd, home) = ctx.input(|i| (i.key_pressed(Key::Comma), i.key_pressed(Key::Period), i.key_pressed(Key::Home)));
+        if back || fwd || home {
+            let last = self.project.total_frames().saturating_sub(1) as f64;
+            self.playhead = if home { 0.0 } else { (self.playhead.floor() + if fwd { 1.0 } else { -1.0 }).clamp(0.0, last) };
+            if let Some((id, _)) = self.project.panel_at(self.playhead as u64) {
+                self.select(Some(id));
+            }
+        }
+        // With a widget focused, arrows are egui's focus navigation and selection follows focus.
+        let nothing_focused = ctx.memory(|m| m.focused().is_none());
+        if left && nothing_focused {
             self.step_selection(-1);
         }
-        if right {
+        if right && nothing_focused {
             self.step_selection(1);
         }
         if tab {
@@ -557,75 +578,96 @@ impl BoardApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("File", |ui| {
-                if ui.button("New Board").clicked() {
+            ui.menu_button(tl!("File"), |ui| {
+                if ui.button(tl!("New Board")).clicked() {
                     self.replace_project(Project::blank("Untitled board"), None);
                 }
-                if ui.button("Open…").clicked() {
+                if ui.button(tl!("Open…")).clicked() {
                     self.open_dialog();
                 }
                 ui.separator();
-                if ui.button("Save").clicked() {
+                if ui.button(tl!("Save")).clicked() {
                     self.save();
                 }
-                if ui.button("Save As…").clicked() {
+                if ui.button(tl!("Save As…")).clicked() {
                     self.save_as();
                 }
                 ui.separator();
-                if ui.button("Import Screenplay (Fountain)…").clicked() {
+                if ui.button(tl!("Import Screenplay (Fountain)…")).clicked() {
                     self.import_fountain();
                 }
-                if ui.button("Import Image to Panel…").clicked() {
+                if ui.button(tl!("Import Image to Panel…")).clicked() {
                     self.import_image();
                 }
                 ui.separator();
-                if ui.button("Export Animatic Timeline (OTIO)…").clicked() {
+                if ui.button(tl!("Export Animatic Timeline (OTIO)…")).clicked() {
                     self.export_animatic();
                 }
-                if ui.button("Export Panel Images (PNG)…").clicked() {
+                if ui.button(tl!("Export Panel Images (PNG)…")).clicked() {
                     self.export_pngs();
                 }
                 ui.separator();
-                if ui.button("Quit").clicked() {
+                if ui.button(tl!("Quit")).clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Edit", |ui| {
-                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new("Undo Drawing")).clicked() {
+            ui.menu_button(tl!("Edit"), |ui| {
+                if ui.add_enabled(!self.undo.is_empty(), egui::Button::new(tl!("Undo Drawing"))).clicked() {
                     self.undo();
                 }
-                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new("Redo Drawing")).clicked() {
+                if ui.add_enabled(!self.redo.is_empty(), egui::Button::new(tl!("Redo Drawing"))).clicked() {
                     self.redo();
                 }
                 ui.separator();
-                if ui.button("New Panel").clicked() {
+                if ui.button(tl!("New Panel")).clicked() {
                     self.add_panel();
                 }
-                if ui.button("New Scene").clicked() {
+                if ui.button(tl!("New Scene")).clicked() {
                     self.add_scene();
                 }
-                if ui.button("Delete Panel").clicked() {
+                if ui.button(tl!("Delete Panel")).clicked() {
                     self.delete_panel();
                 }
                 ui.separator();
-                if ui.button("Move Panel Earlier").clicked() {
+                if ui.button(tl!("Move Panel Earlier")).clicked() {
                     self.move_panel(false);
                 }
-                if ui.button("Move Panel Later").clicked() {
+                if ui.button(tl!("Move Panel Later")).clicked() {
                     self.move_panel(true);
                 }
             });
-            ui.menu_button("View", |ui| {
-                ui.radio_value(&mut self.view, View::Board, "Board (panel grid)");
-                ui.radio_value(&mut self.view, View::Panel, "Panel (draw and camera)");
+            ui.menu_button(tl!("View"), |ui| {
+                ui.radio_value(&mut self.view, View::Board, tl!("Board (panel grid)"));
+                ui.radio_value(&mut self.view, View::Panel, tl!("Panel (draw and camera)"));
                 ui.separator();
-                if ui.button(if self.playing { "Pause Animatic" } else { "Play Animatic" }).clicked() {
+                if ui.button(if self.playing { tl!("Pause Animatic") } else { tl!("Play Animatic") }).clicked() {
                     self.toggle_play();
                 }
+                ui.separator();
+                ui.menu_button(tl!("Language"), |ui| {
+                    if ui.radio(self.language.is_none(), tl!("System")).clicked() {
+                        self.language = None;
+                        crate::i18n::set_language(None);
+                    }
+                    if ui.radio(self.language.as_deref() == Some("en"), "English").clicked() {
+                        self.language = Some("en".into());
+                        crate::i18n::CURRENT.set(craft_i18n::Lang::EN);
+                    }
+                    for lang in crate::i18n::I18N.languages() {
+                        let code = crate::i18n::I18N.code(lang).to_string();
+                        if code == "en" {
+                            continue;
+                        }
+                        if ui.radio(self.language.as_deref() == Some(code.as_str()), crate::i18n::I18N.name(lang)).clicked() {
+                            crate::i18n::set_language(Some(&code));
+                            self.language = Some(code);
+                        }
+                    }
+                });
             });
             ui.separator();
-            ui.selectable_value(&mut self.view, View::Board, "Board");
-            ui.selectable_value(&mut self.view, View::Panel, "Panel");
+            ui.selectable_value(&mut self.view, View::Board, tl!("Board"));
+            ui.selectable_value(&mut self.view, View::Panel, tl!("Panel"));
         });
     }
 
@@ -633,18 +675,23 @@ impl BoardApp {
         if !self.confirm_close {
             return;
         }
-        egui::Window::new("Unsaved changes").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
-            ui.label("Save the board before quitting?");
+        // Esc cancels, as the platform's dialogs do.
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.confirm_close = false;
+            return;
+        }
+        egui::Window::new(tl!("Unsaved changes")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+            ui.label(tl!("Save the board before quitting?"));
             ui.horizontal(|ui| {
-                if ui.button("Save").clicked() && self.save() {
+                if ui.button(tl!("Save")).clicked() && self.save() {
                     self.close_confirmed = true;
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
-                if ui.button("Don't Save").clicked() {
+                if ui.button(tl!("Don't Save")).clicked() {
                     self.close_confirmed = true;
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tl!("Cancel")).clicked() {
                     self.confirm_close = false;
                 }
             });
@@ -677,6 +724,18 @@ impl BoardApp {
             }
         }
     }
+}
+
+/// Dim ("weak") text at 4.5:1 or better on panel backgrounds in both themes; egui's dark default
+/// is below that.
+pub fn readable_visuals(mut v: egui::Visuals) -> egui::Visuals {
+    v.weak_text_color = Some(if v.dark_mode { egui::Color32::from_gray(160) } else { egui::Color32::from_gray(90) });
+    v
+}
+
+fn apply_contrast(ctx: &egui::Context) {
+    ctx.set_visuals_of(egui::Theme::Dark, readable_visuals(egui::Visuals::dark()));
+    ctx.set_visuals_of(egui::Theme::Light, readable_visuals(egui::Visuals::light()));
 }
 
 impl eframe::App for BoardApp {
@@ -712,14 +771,16 @@ impl BoardApp {
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal(|ui| {
                 let fps = self.project.settings.fps.max(1) as f64;
-                ui.label(format!(
-                    "{} scenes · {} panels · {:.1} s",
-                    self.project.scenes.len(),
-                    self.project.panel_count(),
-                    self.project.total_frames() as f64 / fps
+                ui.label(tlf!(
+                    "{scenes} scenes · {panels} panels · {seconds} s",
+                    scenes = self.project.scenes.len(),
+                    panels = self.project.panel_count(),
+                    seconds = format!("{:.1}", self.project.total_frames() as f64 / fps)
                 ));
                 ui.separator();
-                ui.label(&self.status);
+                // The status line is a polite live region: results of actions are announced.
+                let status = ui.label(&self.status);
+                ui.ctx().accesskit_node_builder(status.id, |n| n.set_live(egui::accesskit::Live::Polite));
             });
         });
         egui::Panel::bottom("timeline").resizable(true).default_size(150.0).min_size(110.0).show(ui, |ui| crate::timeline::show(self, ui));

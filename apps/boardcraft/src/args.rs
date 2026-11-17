@@ -35,6 +35,19 @@ pub enum Launch {
     Print(String),
 }
 
+/// `BoardCraft <version>`, plus the commit and date `packaging/env.sh` exports for release builds.
+pub fn version() -> String {
+    let mut v = boardcraft_core::GENERATOR.to_string();
+    if let Some(sha) = option_env!("BOARDCRAFT_BUILD_SHA").filter(|s| !s.is_empty()) {
+        v.push_str(&format!(" ({})", sha.get(..12).unwrap_or(sha)));
+    }
+    if let Some(date) = option_env!("BOARDCRAFT_BUILD_DATE").filter(|s| !s.is_empty()) {
+        v.push_str(&format!(" {date}"));
+    }
+    v.push('\n');
+    v
+}
+
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Launch, String> {
     let mut cli = Cli::default();
     let mut it = args.into_iter();
@@ -59,7 +72,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Launch, String> {
             }
             "--screenshot" => cli.screenshot = Some(PathBuf::from(it.next().ok_or("--screenshot needs a file name")?)),
             "-h" | "--help" => return Ok(Launch::Print(USAGE.to_string())),
-            "-V" | "--version" => return Ok(Launch::Print(format!("{}\n", boardcraft_core::GENERATOR))),
+            "-V" | "--version" => return Ok(Launch::Print(version())),
             other => return Err(format!("unknown option {other}")),
         }
     }

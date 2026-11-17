@@ -11,6 +11,8 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 #![forbid(unsafe_code)]
 
+#[macro_use]
+mod i18n;
 mod app;
 mod args;
 mod board;

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=BoardCraft
+GenericName=Storyboard Editor
+Comment=Storyboards and animatics
+Exec=boardcraft %F
+TryExec=boardcraft
+Icon=ai.storyteller.boardcraft
+Terminal=false
+StartupNotify=true
+StartupWMClass=ai.storyteller.boardcraft
+Categories=Graphics;2DGraphics;RasterGraphics;
+MimeType=application/vnd.storytold.boardcraft+zip;text/x-fountain;
+Keywords=storyboard;animatic;board;panel;screenplay;fountain;film;

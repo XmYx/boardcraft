@@ -12,6 +12,7 @@
 //! - [`format`]: the open `.boardcraft` project file (a zip of `project.json` + one PNG per layer).
 //! - [`otio`]: animatic timeline export to OpenTimelineIO, which FilmCraft imports, plus rendered
 //!   panel stills.
+//! - [`command`]: every edit as a serializable command (app, CLI and tests share them).
 //! - [`ai`]: a stubbed hook for generating panel drawings through the shared Craft AI layer.
 //! - [`demo`]: a small procedurally drawn demo board.
 //!
@@ -21,6 +22,7 @@
 
 pub mod ai;
 pub mod camera;
+pub mod command;
 pub mod demo;
 pub mod error;
 pub mod format;

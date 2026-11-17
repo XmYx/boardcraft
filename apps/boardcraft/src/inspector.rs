@@ -19,22 +19,22 @@ fn text_field(ui: &mut egui::Ui, label: &str, value: &mut String, rows: usize) -
 
 pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let Some(id) = app.selected else {
-        ui.label("Select a panel.");
+        ui.label(tl!("Select a panel."));
         return;
     };
     let label = app.project.panel_label(id);
     let fps = app.project.settings.fps.max(1);
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-        ui.heading(format!("Panel {label}"));
+        ui.heading(tlf!("Panel {label}", label = label));
         let mut changed = false;
         if let Some(pos) = app.project.find_panel(id)
             && let Some(scene) = app.project.scenes.get_mut(pos.scene)
         {
             ui.horizontal(|ui| {
-                let l = ui.label("Scene");
+                let l = ui.label(tl!("Scene"));
                 changed |= ui.add(egui::TextEdit::singleline(&mut scene.number).desired_width(40.0)).labelled_by(l.id).changed();
             });
-            let l = ui.label("Heading");
+            let l = ui.label(tl!("Heading"));
             changed |= ui.add(egui::TextEdit::singleline(&mut scene.heading).desired_width(f32::INFINITY)).labelled_by(l.id).changed();
         }
         ui.separator();
@@ -42,20 +42,20 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         let mut active = app.active_layer;
         if let Some(panel) = app.project.panel_mut(id) {
             ui.horizontal(|ui| {
-                let l = ui.label("Duration");
+                let l = ui.label(tl!("Duration"));
                 changed |= ui
                     .add(egui::DragValue::new(&mut panel.duration).range(1..=boardcraft_core::model::MAX_PANEL_FRAMES).suffix(" fr"))
                     .labelled_by(l.id)
                     .changed();
-                ui.label(format!("= {:.2} s at {fps} fps", panel.duration as f32 / fps as f32));
+                ui.label(tlf!("= {seconds} s at {fps} fps", seconds = format!("{:.2}", panel.duration as f32 / fps as f32), fps = fps));
             });
-            changed |= text_field(ui, "Dialogue", &mut panel.dialogue, 2);
-            changed |= text_field(ui, "Action", &mut panel.action, 3);
-            changed |= text_field(ui, "Notes", &mut panel.notes, 2);
+            changed |= text_field(ui, tl!("Dialogue"), &mut panel.dialogue, 2);
+            changed |= text_field(ui, tl!("Action"), &mut panel.action, 3);
+            changed |= text_field(ui, tl!("Notes"), &mut panel.notes, 2);
             ui.separator();
             ui.horizontal(|ui| {
-                ui.strong("Layers");
-                if ui.button("+ Layer").clicked() {
+                ui.strong(tl!("Layers"));
+                if ui.button(tl!("+ Layer")).clicked() {
                     layer_action = Some(LayerAction::Add);
                 }
             });
@@ -63,22 +63,25 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             // Top layer first, as in every paint app.
             for layer in panel.layers.iter_mut().rev() {
                 ui.horizontal(|ui| {
-                    touched |= ui.checkbox(&mut layer.visible, "").on_hover_text("Visible").changed();
+                    touched |= ui.checkbox(&mut layer.visible, "").on_hover_text(tlf!("{layer} visible", layer = layer.name)).changed();
                     if ui.selectable_label(active == Some(layer.id), &layer.name).clicked() {
                         active = Some(layer.id);
                     }
-                    touched |= ui.add(egui::Slider::new(&mut layer.opacity, 0.0..=1.0).show_value(false)).on_hover_text("Opacity").changed();
-                    ui.menu_button("…", |ui| {
-                        if ui.button("Move Up").clicked() {
+                    touched |= ui
+                        .add(egui::Slider::new(&mut layer.opacity, 0.0..=1.0).show_value(false))
+                        .on_hover_text(tlf!("{layer} opacity", layer = layer.name))
+                        .changed();
+                    ui.menu_button(tlf!("{layer} options", layer = layer.name), |ui| {
+                        if ui.button(tl!("Move Up")).clicked() {
                             layer_action = Some(LayerAction::Up(layer.id));
                         }
-                        if ui.button("Move Down").clicked() {
+                        if ui.button(tl!("Move Down")).clicked() {
                             layer_action = Some(LayerAction::Down(layer.id));
                         }
-                        if ui.button("Clear").clicked() {
+                        if ui.button(tl!("Clear")).clicked() {
                             layer_action = Some(LayerAction::Clear(layer.id));
                         }
-                        if ui.button("Delete").clicked() {
+                        if ui.button(tl!("Delete")).clicked() {
                             layer_action = Some(LayerAction::Delete(layer.id));
                         }
                     });
@@ -89,24 +92,54 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                 changed = true;
             }
             ui.separator();
-            ui.strong("Camera moves");
+            ui.strong(tl!("Camera moves"));
             if panel.camera.keys.is_empty() {
-                ui.label("Static: the whole canvas. Use the Camera tool (C) in the Panel view to frame a move.");
+                ui.label(tl!("Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view."));
             }
+            // Keyboard / typed alternative to the Camera tool's drag and scroll.
             let mut remove = None;
+            let mut edited = None;
             for k in &panel.camera.keys {
+                let mut key = *k;
                 ui.horizontal(|ui| {
-                    ui.monospace(format!("f{:<4} x {:.2} y {:.2} zoom {:.2}", k.frame, k.center[0], k.center[1], k.zoom));
-                    if ui.small_button("Delete").on_hover_text("Delete key").clicked() {
+                    ui.monospace(tlf!("frame {f}", f = k.frame));
+                    let mut c = false;
+                    let l = ui.label("x");
+                    c |= ui.add(egui::DragValue::new(&mut key.center[0]).range(0.0..=1.0).speed(0.005).max_decimals(3)).labelled_by(l.id).changed();
+                    let l = ui.label("y");
+                    c |= ui.add(egui::DragValue::new(&mut key.center[1]).range(0.0..=1.0).speed(0.005).max_decimals(3)).labelled_by(l.id).changed();
+                    let l = ui.label(tl!("zoom"));
+                    c |= ui
+                        .add(egui::DragValue::new(&mut key.zoom).range(1.0..=boardcraft_core::camera::MAX_ZOOM).speed(0.01).max_decimals(2))
+                        .labelled_by(l.id)
+                        .changed();
+                    if c {
+                        edited = Some(key);
+                    }
+                    if ui.small_button(tlf!("Delete key {f}", f = k.frame)).on_hover_text(tlf!("Delete the camera key at frame {f}", f = k.frame)).clicked() {
                         remove = Some(k.frame);
                     }
                 });
             }
+            if let Some(k) = edited {
+                panel.camera.set_key(k);
+                changed = true;
+            }
+            ui.horizontal(|ui| {
+                let end = panel.duration.max(1) - 1;
+                for (label, frame) in [(tl!("Key at start"), 0), (tl!("Key at end"), end)] {
+                    if ui.button(label).clicked() {
+                        let at = panel.camera.at(frame as f32);
+                        panel.camera.set_key(boardcraft_core::CameraKey { frame, ..at });
+                        changed = true;
+                    }
+                }
+            });
             if let Some(f) = remove {
                 panel.camera.remove_key(f);
                 changed = true;
             }
-            if !panel.camera.keys.is_empty() && ui.button("Reset camera").clicked() {
+            if !panel.camera.keys.is_empty() && ui.button(tl!("Reset camera")).clicked() {
                 panel.camera.keys.clear();
                 changed = true;
             }
@@ -120,21 +153,25 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         }
         ui.separator();
         ui.horizontal(|ui| {
-            if ui.button("Import Image…").clicked() {
+            if ui.button(tl!("Import Image…")).clicked() {
                 app.import_image();
             }
-            if ui.button("AI panel sketch").on_hover_text("Generate a sketch for this panel with the shared Craft AI tools (not connected yet)").clicked() {
+            if ui
+                .button(tl!("AI panel sketch"))
+                .on_hover_text(tl!("Generate a sketch for this panel with the shared Craft AI tools (not connected yet)"))
+                .clicked()
+            {
                 app.ai_sketch();
             }
         });
         ui.horizontal(|ui| {
-            if ui.button("Move Earlier").clicked() {
+            if ui.button(tl!("Move Earlier")).clicked() {
                 app.move_panel(false);
             }
-            if ui.button("Move Later").clicked() {
+            if ui.button(tl!("Move Later")).clicked() {
                 app.move_panel(true);
             }
-            if ui.button("Delete Panel").clicked() {
+            if ui.button(tl!("Delete Panel")).clicked() {
                 app.delete_panel();
             }
         });
@@ -144,7 +181,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
 fn apply_layer_action(app: &mut BoardApp, panel_id: Id, action: LayerAction) {
     match action {
         LayerAction::Add => {
-            let layer = app.project.new_layer("Layer");
+            let layer = app.project.new_layer(tl!("Layer"));
             let lid = layer.id;
             if let Some(p) = app.project.panel_mut(panel_id) {
                 p.layers.push(layer);
@@ -163,7 +200,7 @@ fn apply_layer_action(app: &mut BoardApp, panel_id: Id, action: LayerAction) {
                 if p.layers.len() > 1 {
                     p.layers.retain(|l| l.id != lid);
                 } else {
-                    app.status = "A panel keeps at least one layer".into();
+                    app.status = tl!("A panel keeps at least one layer").into();
                 }
             }
             app.undo.retain(|u| u.layer != lid);

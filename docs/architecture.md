@@ -6,11 +6,30 @@
 |---|---|---|---|
 | `boardcraft-core` | `crates/core` | document model, brush, camera, `.boardcraft` format, Fountain import, OTIO/PNG export, AI hook, demo board | no (`cargo xtask layers`) |
 | `boardcraft` | `apps/boardcraft` | the egui desktop app | yes (egui/eframe 0.37, rfd) |
-| `xtask` | `xtask` | `cargo xtask ci | layers | assets` | no |
+| `boardcraft-cli` | `apps/boardcraft-cli` | headless commands, info, export | no |
+| `xtask` | `xtask` | `cargo xtask ci`, `layers`, `assets`, `licenses`, `progress`, `version`, `strings` | no |
 
 Shared libraries from [storytold/craft-libs](https://github.com/storytold/craft-libs), pinned by
 commit in the root `Cargo.toml`: `craft-zip` (container), `craft-image-codecs` (PNG/JPEG/…
-decode, PNG encode), `craft-atomic` (crash-safe saves), `craft-ai-core` (AI role declaration).
+decode, PNG encode), `craft-atomic` (crash-safe saves), `craft-i18n` (interface language),
+`craft-fonts-build` (optional craft-fonts faces), `craft-ai-core` (AI role declaration).
+
+### craft-libs API gaps (not filled by copying code)
+
+- No raster paint canvas or brush crate: `boardcraft-core::raster` is local and a candidate to move.
+- No OpenTimelineIO writer: `boardcraft-core::otio` writes the subset FilmCraft reads; a shared
+  `craft-otio` (or OTIO in `craft-timeline`) would serve FilmCraft and BoardCraft.
+- No Fountain parser: `boardcraft-core::fountain` should move to craft-libs once ScriptCraft needs
+  the same parser.
+- No progress-log joiner yet (RFC-0017): `cargo xtask progress` is a minimal local joiner until the
+  craft-libs one lands.
+
+## Commands
+
+`boardcraft-core::command` holds every board edit as a serializable `Command`; `apply` performs it
+and leaves the project unchanged on error. The app routes structural edits (add/delete/move panel,
+scenes, durations) through it; `boardcraft-cli exec` takes the same JSON ([cli.md](cli.md)).
+Drawing strokes and in-place text editing write the model directly (pixel undo covers strokes).
 
 ## Data model (`boardcraft-core::model`)
 

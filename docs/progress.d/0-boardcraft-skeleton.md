@@ -1,0 +1,1 @@
+| 2026-11-17 | Skeleton: core model, `.boardcraft` format, Fountain import, OTIO + PNG export, commands and `boardcraft-cli`, egui app with board grid, panel canvas, camera keys, timeline and animatic playback, craft-i18n wiring, accessibility tests, demo board |

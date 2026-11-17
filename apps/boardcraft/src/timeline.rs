@@ -5,20 +5,17 @@ use boardcraft_core::Id;
 
 use crate::app::BoardApp;
 
-const SCENE_COLORS: [egui::Color32; 4] = [
-    egui::Color32::from_rgb(70, 130, 200),
-    egui::Color32::from_rgb(200, 140, 60),
-    egui::Color32::from_rgb(90, 170, 110),
-    egui::Color32::from_rgb(170, 90, 160),
-];
+/// Scene band colours; white band text is at least 4.5:1 on each (checked in a test).
+pub const SCENE_COLORS: [egui::Color32; 4] =
+    [egui::Color32::from_rgb(40, 90, 160), egui::Color32::from_rgb(160, 90, 20), egui::Color32::from_rgb(40, 120, 60), egui::Color32::from_rgb(130, 60, 130)];
 
 pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let fps = app.project.settings.fps.max(1) as f64;
     ui.horizontal(|ui| {
-        if ui.button(if app.playing { "Pause" } else { "Play" }).on_hover_text("Play the animatic (Space)").clicked() {
+        if ui.button(if app.playing { tl!("Pause") } else { tl!("Play") }).on_hover_text(tl!("Play the animatic (Space)")).clicked() {
             app.toggle_play();
         }
-        if ui.button("To Start").on_hover_text("Go to start").clicked() {
+        if ui.button(tl!("To Start")).on_hover_text(tl!("Go to start")).clicked() {
             app.playhead = 0.0;
             if let Some((id, _)) = app.project.panel_at(0) {
                 app.select(Some(id));
@@ -28,7 +25,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         let total = app.project.total_frames() as f64 / fps;
         ui.monospace(format!("{:02}:{:05.2} / {:02}:{:05.2}", (t / 60.0) as u32, t % 60.0, (total / 60.0) as u32, total % 60.0));
         ui.separator();
-        let l = ui.label("Zoom");
+        let l = ui.label(tl!("Zoom"));
         ui.add(egui::Slider::new(&mut app.timeline_ppf, 0.5..=12.0).logarithmic(true).show_value(false)).labelled_by(l.id);
     });
     let ppf = app.timeline_ppf;
@@ -39,13 +36,15 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let mut resize: Option<(Id, u32)> = None;
     let live = app.stroke.is_none();
     let selected = app.selected;
+    let focus_selected = app.view == crate::app::View::Panel && std::mem::take(&mut app.focus_selected);
+    let mut block_focused = false;
     let playhead = app.playhead;
     let project = &app.project;
     let textures = &mut app.textures;
     egui::ScrollArea::horizontal().auto_shrink([false, true]).show(ui, |ui| {
         let width = (total as f32 * ppf + 40.0).max(ui.available_width());
         let (rect, bg) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click_and_drag());
-        bg.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, "Animatic timeline"));
+        bg.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, tl!("Animatic timeline")));
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
         let band = 14.0;
@@ -59,7 +58,14 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                 let r = egui::Rect::from_min_size(egui::pos2(x, block_top), egui::vec2(w, block_h));
                 let resp = ui.interact(r, ui.scope_id().with(("tl-panel", panel.id.0)), egui::Sense::click());
                 let label = project.panel_label(panel.id);
-                resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected == Some(panel.id), format!("Panel {label} on the timeline")));
+                resp.widget_info(|| {
+                    egui::WidgetInfo::selected(egui::Role::Button, true, selected == Some(panel.id), tlf!("Panel {label} on the timeline", label = label))
+                });
+                block_focused |= resp.has_focus();
+                if focus_selected && selected == Some(panel.id) {
+                    resp.request_focus();
+                    resp.scroll_to_me(None);
+                }
                 if resp.clicked() {
                     select = Some(panel.id);
                 }
@@ -121,11 +127,15 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         }
     });
     if let Some((id, frames)) = resize
-        && let Some(p) = app.project.panel_mut(id)
-        && p.duration != frames
+        && app.project.panel(id).is_some_and(|p| p.duration != frames)
     {
-        p.duration = frames;
-        app.dirty = true;
+        app.run(boardcraft_core::command::Command::SetDuration { panel: id, frames });
+    }
+    if block_focused {
+        let (l, r) = ui.input(|i| (i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight)));
+        if l || r {
+            app.step_selection(if r { 1 } else { -1 });
+        }
     }
     if let Some(id) = select {
         app.select_and_seek(id);

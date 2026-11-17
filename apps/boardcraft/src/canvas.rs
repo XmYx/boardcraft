@@ -15,32 +15,32 @@ fn view_rect(rect: egui::Rect, v: [f32; 4]) -> egui::Rect {
 
 fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
-        ui.selectable_value(&mut app.tool, CanvasTool::Brush, "Brush").on_hover_text("Draw (B)");
-        ui.selectable_value(&mut app.tool, CanvasTool::Eraser, "Eraser").on_hover_text("Erase (E)");
-        ui.selectable_value(&mut app.tool, CanvasTool::Camera, "Camera").on_hover_text("Drag to frame the shot, scroll to zoom (C)");
+        ui.selectable_value(&mut app.tool, CanvasTool::Brush, tl!("Brush")).on_hover_text(tl!("Draw (B)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::Eraser, tl!("Eraser")).on_hover_text(tl!("Erase (E)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::Camera, tl!("Camera")).on_hover_text(tl!("Drag to frame the shot, scroll to zoom (C)"));
         ui.separator();
         match app.tool {
             CanvasTool::Brush => {
-                let l = ui.label("Size");
+                let l = ui.label(tl!("Size"));
                 ui.add(egui::Slider::new(&mut app.brush.radius, 0.5..=60.0).logarithmic(true)).labelled_by(l.id);
                 let mut c = egui::Color32::from_rgba_unmultiplied(app.brush.color[0], app.brush.color[1], app.brush.color[2], app.brush.color[3]);
-                let l = ui.label("Colour");
+                let l = ui.label(tl!("Colour"));
                 if ui.color_edit_button_srgba(&mut c).labelled_by(l.id).changed() {
                     app.brush.color = c.to_srgba_unmultiplied();
                 }
-                let l = ui.label("Hardness");
+                let l = ui.label(tl!("Hardness"));
                 ui.add(egui::Slider::new(&mut app.brush.hardness, 0.0..=1.0).show_value(false)).labelled_by(l.id);
-                ui.checkbox(&mut app.brush.pressure_size, "Pressure: size");
-                ui.checkbox(&mut app.brush.pressure_opacity, "Pressure: opacity");
+                ui.checkbox(&mut app.brush.pressure_size, tl!("Pressure: size"));
+                ui.checkbox(&mut app.brush.pressure_opacity, tl!("Pressure: opacity"));
             }
             CanvasTool::Eraser => {
-                let l = ui.label("Size");
+                let l = ui.label(tl!("Size"));
                 ui.add(egui::Slider::new(&mut app.eraser_radius, 1.0..=120.0).logarithmic(true)).labelled_by(l.id);
             }
             CanvasTool::Camera => {
-                ui.label("Edit key:");
-                ui.radio_value(&mut app.key_choice, KeyChoice::Start, "Start");
-                ui.radio_value(&mut app.key_choice, KeyChoice::End, "End");
+                ui.label(tl!("Edit key:"));
+                ui.radio_value(&mut app.key_choice, KeyChoice::Start, tl!("Start"));
+                ui.radio_value(&mut app.key_choice, KeyChoice::End, tl!("End"));
             }
         }
     });
@@ -60,7 +60,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     toolbar(app, ui);
     ui.separator();
     let Some(panel_id) = app.selected else {
-        ui.label("No panel selected.");
+        ui.label(tl!("No panel selected."));
         return;
     };
     let settings = app.project.settings;
@@ -73,7 +73,17 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     }
     let rect = egui::Rect::from_center_size(avail.center(), egui::vec2(w, h));
     let resp = ui.allocate_rect(rect, egui::Sense::drag());
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Canvas, true, "Panel canvas"));
+    // The canvas publishes what it shows: which panel, its layers and its camera.
+    let description = match app.project.panel(panel_id) {
+        Some(p) => tlf!(
+            "Panel canvas: panel {label}, {layers} layers, {camera}",
+            label = app.project.panel_label(panel_id),
+            layers = p.layers.len(),
+            camera = if p.camera.moves() { tl!("camera move") } else { tl!("static camera") }
+        ),
+        None => tl!("Panel canvas").to_string(),
+    };
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Canvas, true, description.clone()));
 
     let start = app.project.panel_start(panel_id).unwrap_or(0) as f64;
     let local = (app.playhead - start).max(0.0) as f32;
@@ -147,7 +157,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                         app.stroke = Some(StrokeState { panel: panel_id, layer, last: pt });
                         app.dirty = true;
                     }
-                    None => app.status = "Select a visible layer to draw on".into(),
+                    None => app.status = tl!("Select a visible layer to draw on").into(),
                 }
             } else if resp.dragged()
                 && let Some(pos) = resp.interact_pointer_pos()

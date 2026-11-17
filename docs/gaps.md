@@ -16,9 +16,9 @@ What stands between BoardCraft and a usable beta, most important first. Hours ar
 | 8 | Re-import from ScriptCraft by scene id (update, not duplicate) | Interchange | yes | 10 | [interop](interop.md) |
 | 9 | AI panel sketch through craft-ai-client | AI | no | 16 | [architecture](architecture.md) |
 | 10 | Panel transitions (cut, dissolve) in playback and export | Playback | no | 8 | — |
-| 11 | CLI and MCP (`boardcraft-cli`) for agents | Agents | yes | 12 | — |
-| 12 | craft-i18n catalogs, craft-fonts, craft-ui theme | Suite | yes | 8 | — |
-| 13 | App icon renders and packaging (desktop, metainfo, flatpak, MSI, DMG) | Packaging | yes | 8 | [assets/app-icon/README.md](../assets/app-icon/README.md) |
+| 11 | MCP server / control channel over the commands (CLI done) | Agents | no | 10 | [cli](cli.md) |
+| 12 | Translations in craft-i18n; translated core error texts; craft-ui theme | Suite | yes | 8 | [localization-parity](localization-parity.md) |
+| 13 | Final app icon and its renders; macOS, Windows, flatpak packaging (Linux tar/deb/rpm done) | Packaging | yes | 8 | [assets/app-icon/README.md](../assets/app-icon/README.md) |
 | 14 | Memory: panel layers as tiles, textures for visible panels only | Performance | no | 12 | [architecture](architecture.md) |
 | 15 | Crash journal / autosave | Safety | yes | 6 | — |
 

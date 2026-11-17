@@ -1,0 +1,52 @@
+# .deb and .rpm packages (nfpm: https://nfpm.goreleaser.com). Run by package.sh, which stages the
+# file tree, substitutes its path for ${STAGE} and exports VERSION, NFPM_ARCH and
+# BOARDCRAFT_MAINTAINER.
+name: boardcraft
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${VERSION}
+version_schema: semver
+release: 1
+section: graphics
+priority: optional
+maintainer: ${BOARDCRAFT_MAINTAINER}
+vendor: Learning Machines LLC
+homepage: https://github.com/storytold/boardcraft
+license: MIT OR Apache-2.0
+description: |-
+  Open-source storyboarding and animatics.
+  Board a screenplay into scenes and panels, sketch every panel with a pressure-sensitive brush,
+  frame camera moves, time the panels and play the animatic, then export it as an
+  OpenTimelineIO timeline for FilmCraft. Includes boardcraft-cli for scripts and agents.
+
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libgcc-s1
+      - libxkbcommon0
+      - libvulkan1 | libegl1
+    recommends:
+      - libwayland-client0
+      - libx11-6
+      - xdg-desktop-portal
+  rpm:
+    depends:
+      - glibc >= 2.35
+      - libxkbcommon
+      - (vulkan-loader or libglvnd-egl)
+    recommends:
+      - libwayland-client
+      - libX11
+      - xdg-desktop-portal
+
+contents:
+  - src: ${STAGE}/usr/bin/boardcraft
+    dst: /usr/bin/boardcraft
+    file_info: { mode: 0755 }
+  - src: ${STAGE}/usr/bin/boardcraft-cli
+    dst: /usr/bin/boardcraft-cli
+    file_info: { mode: 0755 }
+  - src: ${STAGE}/usr/share/
+    dst: /usr/share/
+    type: tree
