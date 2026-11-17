@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::annotate::{MAX_SHAPES, Shape};
 use crate::camera::CameraKey;
 use crate::error::{Error, Result};
 use crate::fountain;
@@ -86,6 +87,44 @@ pub enum Command {
     ClearCamera {
         panel: Id,
     },
+    /// Move the camera key on frame `from` to frame `to` (replacing a key there).
+    MoveCameraKey {
+        panel: Id,
+        from: u32,
+        to: u32,
+    },
+    /// Add a vector annotation (stroke, arrow, motion or camera arrow) on top of the panel.
+    AddShape {
+        panel: Id,
+        shape: Shape,
+    },
+    /// Delete the annotation at `index` (0 = drawn first).
+    DeleteShape {
+        panel: Id,
+        index: usize,
+    },
+    /// Move an annotation by `dx, dy` canvas pixels.
+    MoveShape {
+        panel: Id,
+        index: usize,
+        dx: f32,
+        dy: f32,
+    },
+    /// Recolour an annotation (straight-alpha RGBA) and optionally change its line width.
+    StyleShape {
+        panel: Id,
+        index: usize,
+        color: [u8; 4],
+        #[serde(default)]
+        width: Option<f32>,
+    },
+    /// Replace the panel's annotations with the shapes of an SVG document (text), or add them.
+    ImportShapesSvg {
+        panel: Id,
+        svg: String,
+        #[serde(default)]
+        replace: bool,
+    },
     AddLayer {
         panel: Id,
         name: String,
@@ -143,6 +182,10 @@ pub struct Outcome {
 
 fn panel_missing(id: Id) -> Error {
     Error::NotFound(format!("panel {}", id.0))
+}
+
+fn shape_missing(index: usize) -> Error {
+    Error::NotFound(format!("annotation {index}"))
 }
 
 fn ok(message: impl Into<String>) -> Result<Outcome> {
@@ -235,6 +278,62 @@ pub fn apply(project: &mut Project, cmd: &Command) -> Result<Outcome> {
             p.camera.keys.clear();
             ok("camera cleared")
         }
+        Command::MoveCameraKey { panel, from, to } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            if p.camera.move_key(*from, *to) {
+                ok(format!("camera key moved to frame {to}"))
+            } else {
+                Err(Error::NotFound(format!("camera key on frame {from}")))
+            }
+        }
+        Command::AddShape { panel, shape } => {
+            let shape = shape.sanitized().ok_or_else(|| Error::Format("the shape has no drawable points".into()))?;
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            if p.annotations.len() >= MAX_SHAPES {
+                return Err(Error::Unsupported(format!("a panel keeps at most {MAX_SHAPES} annotations")));
+            }
+            let name = shape.kind_name();
+            p.annotations.push(shape);
+            p.touch();
+            ok(format!("added {name}"))
+        }
+        Command::DeleteShape { panel, index } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            if *index >= p.annotations.len() {
+                return Err(shape_missing(*index));
+            }
+            let s = p.annotations.remove(*index);
+            p.touch();
+            ok(format!("deleted {}", s.kind_name()))
+        }
+        Command::MoveShape { panel, index, dx, dy } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            p.annotations.get_mut(*index).ok_or_else(|| shape_missing(*index))?.translate(*dx, *dy);
+            p.touch();
+            ok("moved annotation")
+        }
+        Command::StyleShape { panel, index, color, width } => {
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            let s = p.annotations.get_mut(*index).ok_or_else(|| shape_missing(*index))?;
+            s.color = *color;
+            if let Some(w) = width.filter(|w| w.is_finite()) {
+                s.width = w.clamp(crate::annotate::MIN_WIDTH, crate::annotate::MAX_WIDTH);
+            }
+            p.touch();
+            ok("restyled annotation")
+        }
+        Command::ImportShapesSvg { panel, svg, replace } => {
+            let shapes = crate::annotate::from_svg(svg.as_bytes())?;
+            let p = project.panel_mut(*panel).ok_or_else(|| panel_missing(*panel))?;
+            if *replace {
+                p.annotations.clear();
+            }
+            let room = MAX_SHAPES.saturating_sub(p.annotations.len());
+            let n = shapes.len().min(room);
+            p.annotations.extend(shapes.into_iter().take(room));
+            p.touch();
+            ok(format!("imported {n} annotations"))
+        }
         Command::AddLayer { panel, name } => {
             if project.panel(*panel).is_none() {
                 return Err(panel_missing(*panel));
@@ -312,7 +411,7 @@ mod tests {
         let second = out.created.unwrap();
         apply(&mut p, &parse(&format!(r#"{{"cmd":"set_duration","panel":{},"frames":12}}"#, second.0)).unwrap()).unwrap();
         apply(&mut p, &parse(&format!(r#"{{"cmd":"set_text","panel":{},"field":"dialogue","text":"BOB: Hi"}}"#, second.0)).unwrap()).unwrap();
-        apply(&mut p, &Command::SetCameraKey { panel: second, key: CameraKey { frame: 11, center: [0.6, 0.5], zoom: 2.0 } }).unwrap();
+        apply(&mut p, &Command::SetCameraKey { panel: second, key: CameraKey { frame: 11, center: [0.6, 0.5], zoom: 2.0, rotation: 0.0 } }).unwrap();
         apply(&mut p, &Command::MovePanel { panel: second, later: false }).unwrap();
         assert_eq!(p.scenes[0].panels[0].id, second);
         assert_eq!(p.panel(second).unwrap().duration, 12);
@@ -365,6 +464,40 @@ mod tests {
         // A file with ntsc reads back.
         let back = crate::format::from_bytes(&crate::format::to_bytes(&p).unwrap()).unwrap();
         assert!(back.settings.ntsc);
+    }
+
+    #[test]
+    fn annotation_and_camera_key_commands() {
+        let mut p = Project::blank("t");
+        let id = p.scenes[0].panels[0].id;
+        let add =
+            parse(&format!(r#"{{"cmd":"add_shape","panel":{},"shape":{{"type":"arrow","from":[10,10],"to":[100,40],"color":[0,0,0,255],"width":3}}}}"#, id.0))
+                .unwrap();
+        apply(&mut p, &add).unwrap();
+        apply(&mut p, &Command::MoveShape { panel: id, index: 0, dx: 5.0, dy: 5.0 }).unwrap();
+        apply(&mut p, &Command::StyleShape { panel: id, index: 0, color: [9, 9, 9, 255], width: Some(1e9) }).unwrap();
+        let s = &p.panel(id).unwrap().annotations[0];
+        assert_eq!(s.kind, crate::annotate::ShapeKind::Arrow { from: [15.0, 15.0], to: [105.0, 45.0] });
+        assert_eq!((s.color, s.width), ([9, 9, 9, 255], crate::annotate::MAX_WIDTH));
+        // Annotations show in the composite.
+        assert_ne!(p.panel(id).unwrap().composite(&p.settings).pixel(60, 30), crate::model::PAPER);
+        let svg = crate::annotate::to_svg(&p.panel(id).unwrap().annotations, 1280, 720);
+        apply(&mut p, &Command::ImportShapesSvg { panel: id, svg, replace: false }).unwrap();
+        assert_eq!(p.panel(id).unwrap().annotations.len(), 2);
+        assert!(apply(&mut p, &Command::DeleteShape { panel: id, index: 5 }).is_err());
+        apply(&mut p, &Command::DeleteShape { panel: id, index: 1 }).unwrap();
+        let bad = Shape::new(crate::annotate::ShapeKind::Stroke { points: vec![[f32::NAN, 0.0]] }, [0; 4], 1.0);
+        assert!(apply(&mut p, &Command::AddShape { panel: id, shape: bad }).is_err());
+        // Camera keys move between frames.
+        apply(&mut p, &Command::SetCameraKey { panel: id, key: CameraKey { frame: 4, zoom: 2.0, ..Default::default() } }).unwrap();
+        apply(&mut p, &parse(&format!(r#"{{"cmd":"move_camera_key","panel":{},"from":4,"to":9}}"#, id.0)).unwrap()).unwrap();
+        assert_eq!(p.panel(id).unwrap().camera.keys[0].frame, 9);
+        assert!(apply(&mut p, &Command::MoveCameraKey { panel: id, from: 4, to: 1 }).is_err());
+        // Annotations survive a save and follow a canvas resize.
+        let back = crate::format::from_bytes(&crate::format::to_bytes(&p).unwrap()).unwrap();
+        assert_eq!(back.panel(id).unwrap().annotations, p.panel(id).unwrap().annotations);
+        apply(&mut p, &Command::SetCanvas { width: 1300, height: 720 }).unwrap();
+        assert_eq!(p.panel(id).unwrap().annotations[0].kind, crate::annotate::ShapeKind::Arrow { from: [25.0, 15.0], to: [115.0, 45.0] });
     }
 
     #[test]

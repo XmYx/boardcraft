@@ -129,7 +129,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             ui.separator();
             ui.strong(tl!("Camera moves"));
             if panel.camera.keys.is_empty() {
-                ui.label(tl!("Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view."));
+                ui.label(tl!("Static: the whole canvas. Add keys below, or with the key strip and the Camera tool (C) in the Panel view."));
             }
             // Keyboard / typed alternative to the Camera tool's drag and scroll.
             let mut remove = None;
@@ -148,6 +148,9 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
                         .add(egui::DragValue::new(&mut key.zoom).range(1.0..=boardcraft_core::camera::MAX_ZOOM).speed(0.01).max_decimals(2))
                         .labelled_by(l.id)
                         .changed();
+                    let l = ui.label(tl!("turn"));
+                    let max = boardcraft_core::camera::MAX_ROTATION;
+                    c |= ui.add(egui::DragValue::new(&mut key.rotation).range(-max..=max).speed(0.5).max_decimals(1).suffix("°")).labelled_by(l.id).changed();
                     if c {
                         edited = Some(key);
                     }
@@ -186,6 +189,8 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         if let Some(a) = layer_action {
             apply_layer_action(app, id, a);
         }
+        ui.separator();
+        crate::annotations::inspector(app, ui, id);
         ui.separator();
         ui.horizontal(|ui| {
             if ui.button(tl!("Import Image…")).clicked() {

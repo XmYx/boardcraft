@@ -9,10 +9,20 @@ app	A4, 6 panels a page…
 app	AI panel sketch
 app	AI sketch
 app	Action
+app	Add Arrow
+app	Add Camera Arrow
+app	Add Key at Playhead
+app	Add Motion Arrow
+app	Added {shape}
 app	Animatic timeline
-shared	Apply
+app	Annotation colour
+app	Annotation deleted
+app	Annotations
+app	Apply
+app	Arrow
 app	Aspect ratio
 app	Autosave failed: {error}
+app	Bend
 app	Board
 app	Board (panel grid)
 app	Board Settings
@@ -22,13 +32,24 @@ app	BoardCraft closed before these boards were saved. Recover them?
 app	BoardCraft project
 app	Boarded {scenes} scenes from {file}
 app	Boarded {scenes} scenes, {n} panels from {file}
+app	Broad arrow for a camera move
 app	Brush
 app	CAM
 app	Camera
+app	Camera arrow
+app	Camera key added at frame {f}
+app	Camera key at frame {f}
+app	Camera key at frame {f} deleted
+app	Camera key moved to frame {f}
+app	Camera keys
 app	Camera moves
-shared	Cancel
-shared	Clear
-shared	Colour
+app	Camera tool (C): drag to move the frame, scroll to zoom, Shift+scroll to turn.
+app	Cancel
+app	Centre x
+app	Centre y
+app	Clear
+app	Click a shape to select it, drag to move it, Delete to remove it.
+app	Colour
 app	Conform Timing from Edit…
 app	Conformed timing from {file}: {summary}
 app	Could not import {file}: {error}
@@ -36,45 +57,52 @@ app	Could not open: {error}
 app	Could not read {file}: {error}
 app	Could not recover: {error}
 app	Could not write {file}: {error}
+app	Curved arrow for movement in the shot (M)
 app	Decide Later
-shared	Delete
+app	Delete
+app	Delete Annotation
+app	Delete Key
 app	Delete Panel
 app	Delete key {f}
 app	Delete the camera key at frame {f}
+app	Delete the selected annotation (Delete)
 app	Demo board: Paper Boats
 app	Dialogue
 app	Discard {name}
-shared	Don't Save
-app	Drag to frame the shot, scroll to zoom (C)
+app	Don't Save
+app	Drag to frame the shot, scroll to zoom, Shift+scroll to turn (C)
 app	Draw (B)
 app	Drawings keep their size: the frame grows or crops around the centre.
 app	Duplicate Panel
-shared	Duration
-shared	Edit
+app	Duration
+app	Edit
 app	Edit in Image Editor…
-app	Edit key:
 app	Editing {file} in your image editor. Save there to update the panel.
-app	End
+app	Edits the selected camera key, or adds one at the playhead.
 app	Erase (E)
-shared	Eraser
+app	Eraser
 app	Export Animatic Timeline
+app	Export Annotations (SVG)…
 app	Export Board Sheet (PDF)
 app	Export Panel Images (PNG)…
 app	Export Shot List (CSV)…
 app	Export failed: {error}
 app	Exported {file} (stills in {dir}). Open it in FilmCraft with File ▸ Import.
-shared	File
+app	File
 app	Fit Canvas (0)
+app	Flip Bend
 app	Fountain, Final Draft (.fdx) or a ScriptCraft scene list (.json). Updates the board by scene, keeping drawings.
-shared	Frame
+app	Frame
 app	Frame rate
+app	Freehand vector strokes that stay editable (L)
 app	Generate a sketch for this panel with the shared Craft AI tools (not connected yet)
 app	Go to start
 app	Hardness
 app	Heading
-shared	Height
-shared	Image
-shared	Images
+app	Height
+app	Image
+app	Images
+app	Import Annotations (SVG)…
 app	Import Image to Panel…
 app	Import Image…
 app	Import Screenplay…
@@ -83,89 +111,115 @@ app	Keep panel lengths in seconds
 app	Keep the autosaves and ask again next time
 app	Key at end
 app	Key at start
-shared	Language
-shared	Layer
-shared	Layers
+app	Key the camera at the playhead's frame (K)
+app	Language
+app	Layer
+app	Layers
 app	Letter, 3 panels a page…
 app	Letter, 6 panels a page…
-shared	Move Down
+app	Line width
+app	Motion arrow
+app	Move Down
 app	Move Earlier
 app	Move Later
 app	Move Panel Earlier
 app	Move Panel Later
-shared	Move Up
+app	Move Up
 app	New Board…
 app	New Panel
 app	New Scene
 app	New panel at the end of this scene
+app	Next Key
+app	No keys: the camera shows the whole canvas. Add a key, then frame it with the Camera tool (C) or the fields.
 app	No panel selected.
+app	None yet. Draw with the annotation tools in the Panel view, or add one above.
 app	Notes
+app	Nudge Down
+app	Nudge Left
+app	Nudge Right
+app	Nudge Up
 app	Onion Skin (O)
 app	Open this layer in your image editor; BoardCraft reloads it when you save there
 app	Opened {file}
-shared	Open…
+app	Open…
 app	Page {n} of {total}
-shared	Panel
+app	Panel
 app	Panel (draw and camera)
 app	Panel canvas
 app	Panel {label}
 app	Panel {label} on the timeline
-shared	Pause
+app	Pause
 app	Pause Animatic
-shared	Play
+app	Play
 app	Play Animatic
 app	Play the animatic (Space)
 app	Pressure: opacity
 app	Pressure: size
+app	Previous Key
 app	Quit
 app	Recover unsaved work
 app	Recover {name}
 app	Recovered unsaved work. Save it to keep it.
-shared	Redo
+app	Redo
 app	Redone
 app	Reset camera
-shared	Save
-shared	Save As…
+app	Rotation
+app	Save
+app	Save As…
 app	Save failed: {error}
 app	Save the board before quitting?
 app	Saved {file}
 app	Scene
 app	Scene {number}
 app	Screenplay
+app	Select
 app	Select a panel first
 app	Select a panel.
 app	Select a visible layer to draw on
+app	Select, move and delete annotations (S)
 app	Set the frame to {ratio}, keeping its width
 app	Shot
 app	Shot presets
-shared	Size
-app	Start
-app	Static: the whole canvas. Add keys below, or use the Camera tool (C) in the Panel view.
-shared	System
+app	Shown at zoom {z} so the turned frame stays on the canvas
+app	Size
+app	Static: the whole canvas. Add keys below, or with the key strip and the Camera tool (C) in the Panel view.
+app	Straight arrow: drag from tail to head (A)
+app	System
 app	Take panel durations from an edited timeline (OTIO, EDL, FCP7 XML, FCPXML)
-shared	Timeline
+app	Timeline
 app	Timing
 app	To Start
-shared	Undo
+app	Turn Left
+app	Turn Right
+app	Turn the frame 5° clockwise
+app	Turn the frame 5° counter-clockwise
+app	Undo
 app	Undone
-shared	Unsaved changes
+app	Unsaved changes
 app	Untitled board
 app	Updated the board from {file}: {summary}
 app	Updated the layer from {file}
-shared	View
-shared	Width
+app	Vector pen
+app	Vector stroke
+app	View
+app	Width
 app	Wrote the board sheet {file} ({n} pages)
 app	Wrote the shot list {file}
 app	Wrote {file}; open it in your image editor ({error})
+app	Wrote {n} annotations to {file}
 app	Wrote {n} panel images to {dir}
-shared	Zoom
-app	camera move
+app	Zoom
+app	camera move with {n} keys
 app	frame {f}
 app	s
 app	static camera
+app	turn
 app	zoom
 app	{format}…
 app	{layer} opacity
 app	{layer} options
 app	{layer} visible
 app	{name}, autosaved {time}
+app	{n} keys · playhead at frame {f}
+app	{shape} {n}
+app	{summary} from {file}

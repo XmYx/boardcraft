@@ -1,48 +1,60 @@
-//! Panel view: the drawing canvas, the camera frame and animatic playback.
+//! Panel view: the drawing canvas, the camera frame, annotations and animatic playback.
 
-use boardcraft_core::{CameraKey, Id, StrokePoint};
+use boardcraft_core::{Id, StrokePoint, ViewQuad};
 
-use crate::app::{BoardApp, CanvasTool, KeyChoice, StrokeState};
+use crate::app::{BoardApp, CanvasTool, StrokeState};
 
 const FULL_UV: egui::Rect = egui::Rect { min: egui::pos2(0.0, 0.0), max: egui::pos2(1.0, 1.0) };
 
-fn view_rect(rect: egui::Rect, v: [f32; 4]) -> egui::Rect {
-    egui::Rect::from_min_max(
-        egui::pos2(rect.left() + v[0] * rect.width(), rect.top() + v[1] * rect.height()),
-        egui::pos2(rect.left() + v[2] * rect.width(), rect.top() + v[3] * rect.height()),
-    )
+/// A normalized canvas point on screen inside `rect`.
+fn on_screen(rect: egui::Rect, p: [f32; 2]) -> egui::Pos2 {
+    egui::pos2(rect.left() + p[0] * rect.width(), rect.top() + p[1] * rect.height())
+}
+
+/// Outline a camera frame; a turned frame also marks its top edge so the turn reads.
+fn frame_outline(painter: &egui::Painter, rect: egui::Rect, q: ViewQuad, stroke: egui::Stroke) {
+    let pts: Vec<egui::Pos2> = q.iter().map(|p| on_screen(rect, *p)).collect();
+    painter.add(egui::Shape::closed_line(pts.clone(), stroke));
+    if let [tl, tr, ..] = pts.as_slice() {
+        let mid = egui::pos2((tl.x + tr.x) / 2.0, (tl.y + tr.y) / 2.0);
+        let inward = (pts[3] - pts[0]).normalized() * 8.0;
+        painter.line_segment([mid, mid + inward], stroke);
+    }
 }
 
 fn toolbar(app: &mut BoardApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.selectable_value(&mut app.tool, CanvasTool::Brush, tl!("Brush")).on_hover_text(tl!("Draw (B)"));
         ui.selectable_value(&mut app.tool, CanvasTool::Eraser, tl!("Eraser")).on_hover_text(tl!("Erase (E)"));
-        ui.selectable_value(&mut app.tool, CanvasTool::Camera, tl!("Camera")).on_hover_text(tl!("Drag to frame the shot, scroll to zoom (C)"));
+        ui.selectable_value(&mut app.tool, CanvasTool::Camera, tl!("Camera"))
+            .on_hover_text(tl!("Drag to frame the shot, scroll to zoom, Shift+scroll to turn (C)"));
         ui.separator();
-        match app.tool {
-            CanvasTool::Brush => {
-                let l = ui.label(tl!("Size"));
-                ui.add(egui::Slider::new(&mut app.brush.radius, 0.5..=60.0).logarithmic(true)).labelled_by(l.id);
-                let mut c = egui::Color32::from_rgba_unmultiplied(app.brush.color[0], app.brush.color[1], app.brush.color[2], app.brush.color[3]);
-                let l = ui.label(tl!("Colour"));
-                if ui.color_edit_button_srgba(&mut c).labelled_by(l.id).changed() {
-                    app.brush.color = c.to_srgba_unmultiplied();
-                }
-                let l = ui.label(tl!("Hardness"));
-                ui.add(egui::Slider::new(&mut app.brush.hardness, 0.0..=1.0).show_value(false)).labelled_by(l.id);
-                ui.checkbox(&mut app.brush.pressure_size, tl!("Pressure: size"));
-                ui.checkbox(&mut app.brush.pressure_opacity, tl!("Pressure: opacity"));
-            }
-            CanvasTool::Eraser => {
-                let l = ui.label(tl!("Size"));
-                ui.add(egui::Slider::new(&mut app.eraser_radius, 1.0..=120.0).logarithmic(true)).labelled_by(l.id);
-            }
-            CanvasTool::Camera => {
-                ui.label(tl!("Edit key:"));
-                ui.radio_value(&mut app.key_choice, KeyChoice::Start, tl!("Start"));
-                ui.radio_value(&mut app.key_choice, KeyChoice::End, tl!("End"));
-            }
+        for (tool, label, hint) in crate::annotations::tools() {
+            ui.selectable_value(&mut app.tool, tool, label).on_hover_text(hint);
         }
+    });
+    ui.horizontal_wrapped(|ui| match app.tool {
+        CanvasTool::Brush => {
+            let l = ui.label(tl!("Size"));
+            ui.add(egui::Slider::new(&mut app.brush.radius, 0.5..=60.0).logarithmic(true)).labelled_by(l.id);
+            let mut c = egui::Color32::from_rgba_unmultiplied(app.brush.color[0], app.brush.color[1], app.brush.color[2], app.brush.color[3]);
+            let l = ui.label(tl!("Colour"));
+            if ui.color_edit_button_srgba(&mut c).labelled_by(l.id).changed() {
+                app.brush.color = c.to_srgba_unmultiplied();
+            }
+            let l = ui.label(tl!("Hardness"));
+            ui.add(egui::Slider::new(&mut app.brush.hardness, 0.0..=1.0).show_value(false)).labelled_by(l.id);
+            ui.checkbox(&mut app.brush.pressure_size, tl!("Pressure: size"));
+            ui.checkbox(&mut app.brush.pressure_opacity, tl!("Pressure: opacity"));
+        }
+        CanvasTool::Eraser => {
+            let l = ui.label(tl!("Size"));
+            ui.add(egui::Slider::new(&mut app.eraser_radius, 1.0..=120.0).logarithmic(true)).labelled_by(l.id);
+        }
+        CanvasTool::Camera => {
+            ui.label(tl!("Edits the selected camera key, or adds one at the playhead."));
+        }
+        _ => crate::annotations::toolbar(app, ui),
     });
 }
 
@@ -63,9 +75,12 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         ui.label(tl!("No panel selected."));
         return;
     };
+    if !app.playing {
+        egui::Panel::bottom("camera-keys").resizable(false).show(ui, |ui| crate::camera_keys::strip(app, ui, panel_id));
+    }
     let settings = app.project.settings;
-    let avail = ui.available_rect_before_wrap().shrink(12.0);
     let aspect = settings.width as f32 / settings.height.max(1) as f32;
+    let avail = ui.available_rect_before_wrap().shrink(12.0);
     let (w, h) =
         if avail.width() / avail.height().max(1.0) > aspect { (avail.height() * aspect, avail.height()) } else { (avail.width(), avail.width() / aspect) };
     if w < 8.0 || h < 8.0 {
@@ -74,6 +89,7 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     // View zoom (1 = fit) and pan; the whole area takes input so panning works off the canvas.
     let zoom = app.canvas_zoom.clamp(0.25, 16.0);
     let rect = egui::Rect::from_center_size(avail.center() + app.canvas_pan, egui::vec2(w * zoom, h * zoom));
+    // Drag only: a press starts a stroke (or picks a shape) at once, so a click paints a dot.
     let resp = ui.allocate_rect(avail, egui::Sense::drag());
     if resp.hovered() {
         // Ctrl+wheel or pinch zooms about the pointer; middle-drag or Alt+drag pans.
@@ -92,13 +108,14 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     if panning && resp.dragged() {
         app.canvas_pan += resp.drag_delta();
     }
-    // The canvas publishes what it shows: which panel, its layers and its camera.
+    // The canvas publishes what it shows: which panel, its layers, annotations and camera.
     let description = match app.project.panel(panel_id) {
         Some(p) => tlf!(
-            "Panel canvas: panel {label}, {layers} layers, {camera}",
+            "Panel canvas: panel {label}, {layers} layers, {shapes} annotations, {camera}",
             label = app.project.panel_label(panel_id),
             layers = p.layers.len(),
-            camera = if p.camera.moves() { tl!("camera move") } else { tl!("static camera") }
+            shapes = p.annotations.len(),
+            camera = if p.camera.moves() { tlf!("camera move with {n} keys", n = p.camera.keys.len()) } else { tl!("static camera").to_string() }
         ),
         None => tl!("Panel canvas").to_string(),
     };
@@ -111,11 +128,15 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
     let tex = app.textures.full(ui.ctx(), &app.project, panel);
     let painter = ui.painter_at(avail.expand(12.0));
     if app.playing {
-        // The animatic: what the camera sees.
-        let v = panel.camera.view(local.min(duration as f32 - 1.0));
-        let uv = egui::Rect::from_min_max(egui::pos2(v[0], v[1]), egui::pos2(v[2], v[3]));
+        // The animatic: what the camera sees, turned frames included (a textured quad).
+        let q = panel.camera.quad(local.min(duration as f32 - 1.0), aspect);
         painter.rect_filled(rect.expand(12.0), 0.0, egui::Color32::BLACK);
-        painter.image(tex, rect, uv, egui::Color32::WHITE);
+        let mut mesh = egui::Mesh::with_texture(tex);
+        for (pos, uv) in [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()].into_iter().zip(q) {
+            mesh.vertices.push(egui::epaint::Vertex { pos, uv: egui::pos2(uv[0], uv[1]), color: egui::Color32::WHITE });
+        }
+        mesh.indices = vec![0, 1, 2, 0, 2, 3];
+        painter.add(egui::Shape::mesh(mesh));
         painter.text(
             rect.left_top() + egui::vec2(8.0, 8.0),
             egui::Align2::LEFT_TOP,
@@ -142,20 +163,35 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
         painter.image(ptex, rect, FULL_UV, egui::Color32::from_rgba_unmultiplied(255, 110, 110, 60));
     }
 
-    // Camera frames: start key, end key, and the frame at the playhead.
-    let has_keys = !panel.camera.keys.is_empty();
-    if has_keys || app.tool == CanvasTool::Camera {
-        let first = panel.camera.view(0.0);
-        let last = panel.camera.view(duration as f32 - 1.0);
-        painter.rect_stroke(view_rect(rect, first), 0.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(60, 170, 90)), egui::StrokeKind::Middle);
-        painter.rect_stroke(view_rect(rect, last), 0.0, egui::Stroke::new(2.0, egui::Color32::from_rgb(220, 120, 40)), egui::StrokeKind::Middle);
-        if panel.camera.moves() {
-            let now = panel.camera.view(local);
-            painter.rect_stroke(view_rect(rect, now), 0.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(230, 200, 60)), egui::StrokeKind::Middle);
+    // Camera frames: every key (the selected one bold), and the frame at the playhead.
+    let Some(panel) = app.project.panel(panel_id) else { return };
+    if !panel.camera.keys.is_empty() || app.tool == CanvasTool::Camera {
+        let selected = crate::camera_keys::selected_on(app, panel_id);
+        let last = panel.camera.keys.len().saturating_sub(1);
+        for (i, k) in panel.camera.keys.iter().enumerate() {
+            let color = if i == 0 {
+                egui::Color32::from_rgb(60, 170, 90)
+            } else if i == last {
+                egui::Color32::from_rgb(220, 120, 40)
+            } else {
+                egui::Color32::from_rgb(150, 110, 210)
+            };
+            let width = if selected == Some(k.frame) { 3.5 } else { 1.5 };
+            frame_outline(&painter, rect, k.quad(aspect), egui::Stroke::new(width, color));
+        }
+        if panel.camera.moves() || panel.camera.keys.is_empty() {
+            frame_outline(&painter, rect, panel.camera.quad(local, aspect), egui::Stroke::new(1.0, egui::Color32::from_rgb(230, 200, 60)));
         }
     }
 
+    let k = settings.width as f32 / rect.width().max(1.0);
     let to_canvas = |p: egui::Pos2| ((p.x - rect.left()) / rect.width() * settings.width as f32, (p.y - rect.top()) / rect.height() * settings.height as f32);
+    let to_canvas_arr = move |p: egui::Pos2| {
+        let (x, y) = to_canvas(p);
+        [x, y]
+    };
+    let to_screen = |p: [f32; 2]| on_screen(rect, [p[0] / settings.width as f32, p[1] / settings.height as f32]);
+    crate::annotations::overlay(app, &painter, panel_id, &to_screen, 1.0 / k);
     if panning {
         return;
     }
@@ -215,26 +251,24 @@ pub fn show(app: &mut BoardApp, ui: &mut egui::Ui) {
             }
         }
         CanvasTool::Camera => {
-            let frame = if app.key_choice == KeyChoice::Start { 0 } else { duration - 1 };
             let drag = resp.drag_delta();
-            let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) } else { 0.0 };
+            let (scroll, shift) =
+                if resp.hovered() { ui.input(|i| (i.smooth_scroll_delta.x + i.smooth_scroll_delta.y, i.modifiers.shift)) } else { (0.0, false) };
             if drag != egui::Vec2::ZERO || scroll != 0.0 {
-                if let Some(p) = app.project.panel_mut(panel_id) {
-                    // A move needs both ends: pin the other end where the camera is before this edit.
-                    let other = if frame == 0 { duration - 1 } else { 0 };
-                    if other != frame && !p.camera.keys.iter().any(|k| k.frame == other) {
-                        let at = p.camera.at(other as f32);
-                        p.camera.set_key(CameraKey { frame: other, ..at });
-                    }
-                    let mut key = p.camera.keys.iter().find(|k| k.frame == frame).copied().unwrap_or_else(|| CameraKey { frame, ..p.camera.at(frame as f32) });
+                // The selected key, or a new one at the playhead.
+                if let Some(mut key) = crate::camera_keys::edit_target(app, panel_id) {
                     key.center[0] += drag.x / rect.width();
                     key.center[1] += drag.y / rect.height();
-                    key.zoom *= (scroll * 0.003).exp();
-                    p.camera.set_key(key);
+                    if shift {
+                        key.rotation += scroll * 0.05;
+                    } else {
+                        key.zoom *= (scroll * 0.003).exp();
+                    }
+                    crate::camera_keys::set_selected(app, panel_id, key);
                 }
-                app.edited();
             }
         }
+        _ => crate::annotations::canvas_input(app, &resp, panel_id, &to_canvas_arr, k),
     }
 }
 

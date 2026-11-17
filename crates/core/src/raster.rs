@@ -120,6 +120,18 @@ impl Raster {
         Arc::ptr_eq(&self.data, &other.data)
     }
 
+    /// A handle on this raster's pixel buffer that does not keep the pixels alive: still the same
+    /// buffer ([`Raster::is_buffer`]) exactly while no copy has been written. Lets a cache keep
+    /// work done on unchanged pixels (encoded PNGs) without holding them.
+    pub fn buffer_key(&self) -> std::sync::Weak<Vec<u8>> {
+        Arc::downgrade(&self.data)
+    }
+
+    /// Whether `key` (from [`Raster::buffer_key`]) is still this raster's unchanged buffer.
+    pub fn is_buffer(&self, key: &std::sync::Weak<Vec<u8>>) -> bool {
+        key.strong_count() > 0 && std::ptr::eq(key.as_ptr(), Arc::as_ptr(&self.data))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
@@ -243,6 +255,46 @@ impl Raster {
         }
     }
 
+    /// Fill the triangle `t` (canvas pixels) with `color`, anti-aliased (4 × 4 samples a pixel).
+    pub fn fill_triangle(&mut self, t: [[f32; 2]; 3], color: [u8; 4]) {
+        if t.iter().flatten().any(|v| !v.is_finite()) {
+            return;
+        }
+        let area = (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1]);
+        if area.abs() < 1e-6 {
+            return;
+        }
+        let xs = t.map(|p| p[0]);
+        let ys = t.map(|p| p[1]);
+        let x0 = xs.iter().copied().fold(f32::INFINITY, f32::min).floor().max(0.0);
+        let x1 = xs.iter().copied().fold(f32::NEG_INFINITY, f32::max).ceil().min(self.width as f32);
+        let y0 = ys.iter().copied().fold(f32::INFINITY, f32::min).floor().max(0.0);
+        let y1 = ys.iter().copied().fold(f32::NEG_INFINITY, f32::max).ceil().min(self.height as f32);
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let edge = |a: [f32; 2], b: [f32; 2], x: f32, y: f32| (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+        let sign = area.signum();
+        for y in y0 as i64..y1 as i64 {
+            for x in x0 as i64..x1 as i64 {
+                let mut hits = 0u32;
+                for j in 0..4 {
+                    for i in 0..4 {
+                        let (px, py) = (x as f32 + (i as f32 + 0.5) / 4.0, y as f32 + (j as f32 + 0.5) / 4.0);
+                        if edge(t[0], t[1], px, py) * sign >= 0.0 && edge(t[1], t[2], px, py) * sign >= 0.0 && edge(t[2], t[0], px, py) * sign >= 0.0 {
+                            hits += 1;
+                        }
+                    }
+                }
+                if hits > 0
+                    && let Some(i) = self.index(x, y)
+                {
+                    self.paint_px(i, color, hits as f32 / 16.0);
+                }
+            }
+        }
+    }
+
     /// Bilinear sample at continuous pixel coordinates (pixel centres at `+0.5`), premultiplied
     /// RGBA in 0..=1. Outside the canvas is transparent.
     pub fn sample(&self, x: f32, y: f32) -> [f32; 4] {
@@ -272,10 +324,26 @@ impl Raster {
     /// Render the normalized rectangle `rect = [x0, y0, x1, y1]` (0..=1 of this canvas) into a new
     /// `width × height` raster (bilinear; area-averaged when shrinking a lot).
     pub fn render_view(&self, rect: [f32; 4], width: u32, height: u32) -> Raster {
+        let [x0, y0, x1, y1] = rect;
+        self.render_quad([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], width, height)
+    }
+
+    /// Render the (possibly turned) parallelogram with normalized corners `quad` (top-left,
+    /// top-right, bottom-right, bottom-left of the output) into a new `width × height` raster.
+    /// Outside the canvas is transparent. Non-finite corners give a transparent raster.
+    pub fn render_quad(&self, quad: [[f32; 2]; 4], width: u32, height: u32) -> Raster {
         let mut out = Raster::new(width, height);
+        if quad.iter().flatten().any(|v| !v.is_finite() || v.abs() > 1e6) {
+            return out;
+        }
         let (w, h) = (out.width, out.height);
-        let sx = (rect[2] - rect[0]) * self.width as f32 / w as f32;
-        let sy = (rect[3] - rect[1]) * self.height as f32 / h as f32;
+        let (cw, ch) = (self.width as f32, self.height as f32);
+        let origin = [quad[0][0] * cw, quad[0][1] * ch];
+        // Canvas pixels per output pixel along the output's x and y.
+        let ux = [(quad[1][0] - quad[0][0]) * cw / w as f32, (quad[1][1] - quad[0][1]) * ch / w as f32];
+        let uy = [(quad[3][0] - quad[0][0]) * cw / h as f32, (quad[3][1] - quad[0][1]) * ch / h as f32];
+        let sx = ux[0].hypot(ux[1]);
+        let sy = uy[0].hypot(uy[1]);
         // Supersample when shrinking so thin pencil lines survive in thumbnails.
         let ss = (sx.max(sy).ceil() as usize).clamp(1, 4);
         for y in 0..h {
@@ -283,8 +351,10 @@ impl Raster {
                 let mut acc = [0.0f32; 4];
                 for j in 0..ss {
                     for i in 0..ss {
-                        let u = rect[0] * self.width as f32 + (x as f32 + (i as f32 + 0.5) / ss as f32) * sx;
-                        let v = rect[1] * self.height as f32 + (y as f32 + (j as f32 + 0.5) / ss as f32) * sy;
+                        let fx = x as f32 + (i as f32 + 0.5) / ss as f32;
+                        let fy = y as f32 + (j as f32 + 0.5) / ss as f32;
+                        let u = origin[0] + fx * ux[0] + fy * uy[0];
+                        let v = origin[1] + fx * ux[1] + fy * uy[1];
                         let s = self.sample(u, v);
                         for c in 0..4 {
                             acc[c] += s[c];
@@ -494,6 +564,31 @@ mod tests {
         let half = paper.render_view([0.0, 0.0, 0.5, 0.5], 10, 10);
         assert_eq!(half.width(), 10);
         assert_eq!(half.pixel(9, 9)[3], 255);
+    }
+
+    #[test]
+    fn turned_quads_sample_turned_pixels() {
+        // A dot near the top-left of a square canvas.
+        let mut r = Raster::new(20, 20);
+        r.dab(StrokePoint::new(3.0, 3.0, 1.0), &Brush { radius: 2.0, hardness: 1.0, ..Brush::default() });
+        // A quad turned a quarter clockwise: output top-left is canvas top-right.
+        let q = r.render_quad([[1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]], 20, 20);
+        // Canvas (3, 3) appears at output (3, 16) (x = canvas y, y = 19 - canvas x).
+        assert!(q.pixel(3, 16)[3] > 200, "{:?}", q.pixel(3, 16));
+        assert_eq!(q.pixel(16, 3)[3], 0);
+        // The axis-aligned quad matches render_view.
+        assert_eq!(r.render_quad([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], 10, 10), r.render_view([0.0, 0.0, 1.0, 1.0], 10, 10));
+        assert!(r.render_quad([[f32::NAN, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], 4, 4).is_blank());
+    }
+
+    #[test]
+    fn triangles_fill_and_ignore_garbage() {
+        let mut r = Raster::new(20, 20);
+        r.fill_triangle([[2.0, 2.0], [18.0, 2.0], [2.0, 18.0]], [255, 0, 0, 255]);
+        assert_eq!(r.pixel(5, 5), [255, 0, 0, 255]);
+        assert_eq!(r.pixel(17, 17)[3], 0);
+        r.fill_triangle([[f32::NAN, 0.0], [1e30, 0.0], [0.0, -1e30]], [0, 0, 0, 255]);
+        r.fill_triangle([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]], [0, 0, 0, 255]);
     }
 
     #[test]

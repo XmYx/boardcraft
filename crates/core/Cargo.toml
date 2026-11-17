@@ -21,6 +21,8 @@ craft-zip = { workspace = true }
 craft-timeline = { workspace = true }
 craft-xml = { workspace = true }
 craft-pdf = { workspace = true }
+craft-svg = { workspace = true }
+kurbo = { workspace = true }
 skrifa = { workspace = true }
 
 [dev-dependencies]

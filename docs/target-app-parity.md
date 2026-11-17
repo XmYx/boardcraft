@@ -21,12 +21,12 @@ feature set works today, weighted by everyday use. Re-measured 2026-11-17.
 | Dimension | Weight | Before polish | Now | What moved it |
 |---|---|---|---|---|
 | Board structure and navigation | 15% | 25% | 40% | duplicate panel, Board Settings, keyboard focus and navigation |
-| Drawing tools | 30% | 5% | 12% | canvas zoom/pan, straight lines, onion skin, edit in any image editor, faster strokes |
-| Camera and staging | 15% | 10% | 15% | typed camera keys; still no rotation or 3D |
+| Drawing tools | 30% | 5% | 17% | canvas zoom/pan, straight lines, onion skin, edit in any image editor, faster strokes; editable vector strokes and arrow/motion/camera symbols |
+| Camera and staging | 15% | 10% | 30% | typed camera keys; rotation, any number of keys with a key strip, moves exported as Motion keyframes; still no 3D |
 | Timing, audio, playback | 15% | 10% | 20% | 23.976–60 fps, rate change keeping timing; still no audio |
 | Script import / export | 15% | 50% | 55% | shot list CSV, shot field |
 | Printing and sharing | 10% | 35% | 45% | shot list; sheet field choice still missing |
-| **Weighted total** | | **≈19%** | **≈28%** | |
+| **Weighted total** | | **≈19%** | **≈32%** | |
 
 Data safety (autosave, crash recovery, full undo, atomic saves) is not a feature dimension of the
 reference but was its users' most serious complaint category; BoardCraft now covers it.
@@ -36,8 +36,8 @@ reference but was its users' most serious complaint category; BoardCraft now cov
 | Area | Works today | Missing |
 |---|---|---|
 | Scenes, panels | add, duplicate, delete, reorder, numbers, headings, shot type | acts/sequences, renumbering rules, panel split |
-| Drawing | pressure brush, eraser, layers, image import, external editor round trip, zoom/pan, straight lines, onion skin | vector strokes, fill, lasso/transform, canvas rotation, stabilizer, rulers |
-| Camera | pan/zoom keys, eased, typed values | rotation, multi-key timeline editor, 3D layers |
+| Drawing | pressure brush, eraser, layers, image import, external editor round trip, zoom/pan, straight lines, onion skin; vector annotation layer (freehand vector strokes, arrows, motion arrows, camera arrows; select/move/recolour; SVG in and out) | vector brush with pressure, fill, lasso/transform of pixels, canvas rotation, stabilizer, rulers |
+| Camera | pan/zoom/rotation keys, any number per panel, eased, key strip (add/select/move/delete by pointer or keyboard), typed values, Motion keyframes in timeline exports | per-key easing curves, 3D layers |
 | Timeline | duration retiming, playhead, scene bands, 23.976–60 fps | audio tracks, transitions |
 | Import | Fountain, Final Draft, ScriptCraft scene list; re-import by scene id; conform | PDF scripts, audio |
 | Export | OTIO, EDL, FCP7 XML, FCPXML (+ stills), PDF board sheets, shot list CSV, PNG panels | movie render with burn-ins, sheet templates |
@@ -45,6 +45,10 @@ reference but was its users' most serious complaint category; BoardCraft now cov
 
 ## What works today (evidence)
 
+- Camera/vector/performance tests: rotation interpolation and fitting, turned-frame rendering,
+  Motion keyframes matching the camera frame, annotation drawing/hit/SVG round trip and fuzzing,
+  incremental save, texture eviction on a 300-panel board, kittest key strip and annotation flows
+  by keyboard.
 - Polish-pass tests: autosave and recovery (unit and kittest), undo of strokes, typing and
   structural edits by keyboard, Board Settings by keyboard, duplicate/onion/zoom/shot presets.
 

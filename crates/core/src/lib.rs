@@ -6,7 +6,9 @@
 //! panels are the animatic.
 //!
 //! - [`raster`]: straight-alpha RGBA8 canvases and the pressure-aware round brush and eraser.
-//! - [`camera`]: camera keyframes and the eased pan/zoom between them.
+//! - [`camera`]: camera keyframes and the eased pan, zoom and rotation between them.
+//! - [`annotate`]: vector annotations (strokes, arrows, motion and camera arrows), drawn over the
+//!   layers and exchanged as SVG.
 //! - [`fountain`]: Fountain screenplay import (scene headings, action, dialogue), the hand-off from
 //!   ScriptCraft.
 //! - [`script`]: screenplays in Fountain, Final Draft (`.fdx`) and ScriptCraft's scene list (JSON),
@@ -26,6 +28,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
 pub mod ai;
+pub mod annotate;
 pub mod camera;
 pub mod command;
 pub mod demo;
@@ -40,7 +43,8 @@ pub mod shotlist;
 pub mod stills;
 pub mod timeline;
 
-pub use camera::{Camera, CameraKey, ViewRect};
+pub use annotate::{Shape, ShapeKind};
+pub use camera::{Camera, CameraKey, ViewQuad, ViewRect};
 pub use error::{Error, Result};
 pub use model::{Id, Layer, Panel, Project, Scene, Settings};
 pub use raster::{Brush, Raster, StrokePoint, Tool};

@@ -25,6 +25,11 @@ company's product or feature names appear as labels.
 | Export Panel Images (PNG) | one image per panel |
 | AI panel sketch | generate a sketch with the shared Craft AI tools (stub) |
 | Key at start / Key at end | add a camera key on the panel's first / last frame |
+| Camera keys (strip), Add Key at Playhead | the panel's camera keys along its frames, under the canvas |
+| Turn Left / Turn Right, Rotation | turn the selected camera key's frame |
+| Annotations | editable vector shapes over a panel's drawing |
+| Select, Vector pen, Arrow, Motion arrow, Camera arrow | the annotation tools |
+| Export / Import Annotations (SVG) | a panel's annotations as an SVG file |
 | `boardcraft-cli` | the command-line tool |
 
 ## Name check

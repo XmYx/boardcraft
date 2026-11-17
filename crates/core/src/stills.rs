@@ -1,6 +1,7 @@
 //! Rendered panel stills: what the camera sees at the first frame of each panel, at the project
-//! resolution. Timeline exports ([`crate::timeline`]) reference them; File ▸ Export Panel Images
-//! writes them on their own.
+//! resolution, annotations included. File ▸ Export Panel Images writes them; timeline exports
+//! ([`crate::timeline`]) reference them, except that a panel whose camera moves exports its whole
+//! canvas so the editor can replay the move.
 
 use std::path::{Path, PathBuf};
 
@@ -13,10 +14,27 @@ pub fn still_name(scene_index: usize, panel_index: usize) -> String {
     format!("s{:03}_p{:03}.png", scene_index + 1, panel_index + 1)
 }
 
-/// Render what the camera sees at `frame` of `panel` at the project resolution.
+/// Render what the camera sees at `frame` of `panel` at the project resolution, turned frames
+/// included.
 pub fn render_frame(project: &Project, panel: &Panel, frame: f32) -> Raster {
-    let composite = panel.composite(&project.settings);
-    composite.render_view(panel.camera.view(frame), project.settings.width, project.settings.height)
+    let s = &project.settings;
+    let composite = panel.composite(s);
+    let quad = panel.camera.quad(frame, s.width as f32 / s.height.max(1) as f32);
+    let view = composite.render_quad(quad, s.width, s.height);
+    // A frame turned past what the zoom limit can cover shows paper, never transparency.
+    if quad.iter().flatten().any(|v| !(-1e-3..=1.001).contains(v)) {
+        let mut paper = Raster::filled(s.width, s.height, crate::model::PAPER);
+        paper.composite_over(&view, 1.0);
+        return paper;
+    }
+    view
+}
+
+/// The still a timeline export uses for `panel`: the whole canvas when its camera moves (the
+/// editor plays the move as Motion keyframes on it, see [`crate::timeline`]), else the camera's
+/// view at the first frame.
+pub fn export_still(project: &Project, panel: &Panel) -> Raster {
+    if panel.camera.moves() { panel.composite(&project.settings) } else { render_frame(project, panel, 0.0) }
 }
 
 /// `file://` URL of an absolute path, percent-encoding everything outside the RFC 3986 unreserved
@@ -37,14 +55,24 @@ pub fn file_url(path: &Path) -> String {
     out
 }
 
-/// Render every panel's still into `stills_dir` (created if needed). Returns the files written.
+/// Render every panel's still (the camera's first frame) into `stills_dir` (created if needed).
+/// Returns the files written.
 pub fn write_stills(project: &Project, stills_dir: &Path) -> Result<Vec<PathBuf>> {
+    write_with(project, stills_dir, |panel| render_frame(project, panel, 0.0))
+}
+
+/// The stills a timeline export references ([`export_still`]) into `stills_dir`.
+pub fn write_export_stills(project: &Project, stills_dir: &Path) -> Result<Vec<PathBuf>> {
+    write_with(project, stills_dir, |panel| export_still(project, panel))
+}
+
+fn write_with(project: &Project, stills_dir: &Path, render: impl Fn(&Panel) -> Raster) -> Result<Vec<PathBuf>> {
     std::fs::create_dir_all(stills_dir).map_err(|e| Error::io(stills_dir, e))?;
     let mut written = Vec::new();
     for (si, scene) in project.scenes.iter().enumerate() {
         for (pi, panel) in scene.panels.iter().enumerate() {
             let path = stills_dir.join(still_name(si, pi));
-            let png = render_frame(project, panel, 0.0).to_png()?;
+            let png = render(panel).to_png()?;
             craft_atomic::atomic_write(&path, &png).map_err(|e| Error::io(&path, e))?;
             written.push(path);
         }

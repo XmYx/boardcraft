@@ -1,0 +1,1 @@
+| 2026-11-17 | Camera rotation and any number of camera keys with a key strip (keyboard and typed alternatives); camera moves exported as Motion keyframes on full-canvas stills (OTIO, FCP7 XML, FCPXML, checked with FilmCraft); vector annotations (strokes, arrows, motion and camera arrows) with SVG in/out; incremental saves and on-screen-only textures for large boards; schema 2 |

@@ -47,6 +47,12 @@ const COMMANDS: &[&str] = &[
     "set_camera_key",
     "remove_camera_key",
     "clear_camera",
+    "move_camera_key",
+    "add_shape",
+    "delete_shape",
+    "move_shape",
+    "style_shape",
+    "import_shapes_svg",
     "add_layer",
     "delete_layer",
     "set_layer_visible",
@@ -81,6 +87,7 @@ fn info(path: &Path) -> Result<String, Fail> {
                     "dialogue": x.dialogue, "action": x.action, "notes": x.notes,
                     "layers": x.layers.iter().map(|l| json!({"id": l.id.0, "name": l.name, "visible": l.visible, "opacity": l.opacity})).collect::<Vec<_>>(),
                     "camera": x.camera.keys,
+                    "annotations": x.annotations,
                 })).collect::<Vec<_>>(),
             })
         })

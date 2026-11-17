@@ -2,7 +2,7 @@
 //! accessible name (house rule: accessibility).
 
 use egui_kittest::Harness;
-use egui_kittest::kittest::{By, Queryable};
+use egui_kittest::kittest::{By, NodeT, Queryable};
 
 use crate::app::{BoardApp, CanvasTool, View};
 use crate::args::{Cli, StartView};
@@ -276,4 +276,142 @@ fn duplicate_onion_zoom_and_shot_presets() {
     let copy = h.state().selected.unwrap();
     assert_ne!(copy, id);
     assert_eq!(h.state().project.panel(copy).unwrap().shot, h.state().project.panel(id).unwrap().shot);
+}
+
+/// Focus a control by its accessible name and press Enter (a keyboard "click").
+fn press(h: &mut Harness<'static, BoardApp>, label: &str) {
+    h.get_by_label(label).focus();
+    h.run();
+    h.key_press(egui::Key::Enter);
+    h.run();
+}
+
+#[test]
+fn camera_keys_by_keyboard() {
+    let mut h = harness(StartView::Panel);
+    h.run();
+    // A static panel: 1.2.
+    h.key_press(egui::Key::ArrowRight);
+    h.run();
+    let id = h.state().selected.unwrap();
+    assert!(h.state().project.panel(id).unwrap().camera.keys.is_empty());
+    // Leave the timeline block that took focus; K keys the camera at the playhead, . steps it.
+    h.key_press(egui::Key::Escape);
+    h.run();
+    h.key_press(egui::Key::K);
+    h.run();
+    for _ in 0..3 {
+        h.key_press(egui::Key::Period);
+        h.run();
+    }
+    h.key_press(egui::Key::K);
+    h.run();
+    let frames = |h: &Harness<'static, BoardApp>| h.state().project.panel(id).unwrap().camera.keys.iter().map(|k| k.frame).collect::<Vec<_>>();
+    assert_eq!(frames(&h), [0, 3]);
+    // The markers are buttons with their frame in the name; the selected one says so.
+    let marker = h.get(By::new().role(egui::Role::Button).label("Camera key at frame 3"));
+    // egui publishes a selected button as toggled (pressed).
+    assert_eq!(marker.accesskit_node().toggled(), Some(egui::accesskit::Toggled::True));
+    marker.focus();
+    h.run();
+    // Shift+Right moves the key a frame; focus follows it.
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::ArrowRight);
+    h.run();
+    h.run();
+    assert_eq!(frames(&h), [0, 4]);
+    assert!(h.get_by_label("Camera key at frame 4").is_focused());
+    // Left selects the previous key.
+    h.key_press(egui::Key::ArrowLeft);
+    h.run();
+    h.run();
+    assert_eq!(h.state().camera_key, Some((id, 0)));
+    // Turn without a pointer.
+    press(&mut h, "Turn Right");
+    press(&mut h, "Turn Right");
+    assert_eq!(h.state().project.panel(id).unwrap().camera.key(0).unwrap().rotation, 10.0);
+    assert!(h.state().project.panel(id).unwrap().camera.turns());
+    // The turned frame needs more zoom; the strip says so.
+    assert!(h.query_by_label_contains("so the turned frame stays on the canvas").is_some());
+    // Delete on a focused marker removes its key.
+    h.get_by_label("Camera key at frame 4").focus();
+    h.run();
+    h.key_press(egui::Key::Delete);
+    h.run();
+    assert_eq!(frames(&h), [0]);
+    // Playback renders the turned frame.
+    h.key_press(egui::Key::Escape);
+    h.run();
+    h.state_mut().toggle_play();
+    h.run_steps(3);
+    assert!(h.state().playing);
+}
+
+#[test]
+fn annotations_by_keyboard() {
+    let mut h = harness(StartView::Panel);
+    h.run();
+    let id = h.state().selected.unwrap();
+    let before = h.state().project.panel(id).unwrap().annotations.len();
+    press(&mut h, "Add Motion Arrow");
+    let shapes = |h: &Harness<'static, BoardApp>| h.state().project.panel(id).unwrap().annotations.clone();
+    assert_eq!(shapes(&h).len(), before + 1);
+    assert_eq!(h.state().shape_sel, Some((id, before)));
+    let at = shapes(&h)[before].bounds();
+    press(&mut h, "Nudge Right");
+    assert!((shapes(&h)[before].bounds()[0] - at[0] - 10.0).abs() < 1e-3);
+    press(&mut h, "Flip Bend");
+    // The list names each shape.
+    assert!(h.query_by_label(&format!("Motion arrow {}", before + 1)).is_some());
+    press(&mut h, "Delete Annotation");
+    assert_eq!(shapes(&h).len(), before);
+    // Undo brings the shape back.
+    h.key_press(egui::Key::Escape);
+    h.run();
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    h.run();
+    assert_eq!(shapes(&h).len(), before + 1);
+    // Delete with nothing focused removes the selected shape.
+    h.state_mut().shape_sel = Some((id, before));
+    h.key_press(egui::Key::Delete);
+    h.run();
+    assert_eq!(shapes(&h).len(), before);
+}
+
+#[test]
+fn arrows_draw_and_move_on_the_canvas() {
+    let mut h = harness(StartView::Panel);
+    h.run();
+    let id = h.state().selected.unwrap();
+    h.key_press(egui::Key::A);
+    h.run();
+    assert_eq!(h.state().tool, CanvasTool::Arrow);
+    let canvas = h.get_by_label_contains("Panel canvas").rect();
+    let a = canvas.center() + egui::vec2(-150.0, 60.0);
+    let b = canvas.center() + egui::vec2(150.0, 60.0);
+    h.drag_at(a);
+    h.run();
+    h.hover_at(b);
+    h.run();
+    h.drop_at(b);
+    h.run();
+    let n = h.state().project.panel(id).unwrap().annotations.len();
+    assert!(n >= 1);
+    let last = h.state().project.panel(id).unwrap().annotations[n - 1].clone();
+    assert!(matches!(last.kind, boardcraft_core::ShapeKind::Arrow { .. }));
+    assert_eq!(h.state().history.undo_len(), 1, "one arrow is one undo step");
+    // The canvas node counts it.
+    let _ = h.get_by_label_contains(&format!("{n} annotations"));
+    // Select tool: drag the arrow by its shaft.
+    h.key_press(egui::Key::S);
+    h.run();
+    let mid = canvas.center() + egui::vec2(-60.0, 60.0);
+    h.drag_at(mid);
+    h.run();
+    h.hover_at(mid + egui::vec2(0.0, 40.0));
+    h.run();
+    h.drop_at(mid + egui::vec2(0.0, 40.0));
+    h.run();
+    let moved = h.state().project.panel(id).unwrap().annotations[n - 1].clone();
+    assert_eq!(h.state().shape_sel, Some((id, n - 1)));
+    assert!(moved.bounds()[1] > last.bounds()[1] + 5.0, "{:?} → {:?}", last.bounds(), moved.bounds());
 }

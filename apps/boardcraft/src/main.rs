@@ -13,10 +13,12 @@
 
 #[macro_use]
 mod i18n;
+mod annotations;
 mod app;
 mod args;
 mod autosave;
 mod board;
+mod camera_keys;
 mod canvas;
 mod external;
 mod history;
