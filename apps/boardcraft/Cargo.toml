@@ -30,7 +30,7 @@ craft-settings = { workspace = true }
 serde = { workspace = true }
 craft-fonts-build = { workspace = true }
 # Audio output for animatic playback (Apache-2.0; as FilmCraft).
-cpal = "0.17"
+cpal = "0.18"
 # Remappable shortcuts and the shared Keyboard Shortcuts dialog; user overrides in config.toml.
 craft-keymap = { workspace = true, features = ["ui"] }
 
